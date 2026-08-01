@@ -1,0 +1,37 @@
+Drummer Studio — Free & Open Source
+=====================================
+
+MIT License. Free for everyone — use, modify, share, and sell
+your own builds. See LICENSE and README.md for full terms.
+
+WHAT IT IS
+----------
+Open-source drum studio software. Application code only — no
+sample libraries are included or redistributed.
+
+You play drums using WAV/MIDI libraries you already own and
+have installed (EZDrummer, Cakewalk, custom folders, etc.).
+
+INSTALL
+-------
+  .\Install Drummer Studio.ps1
+
+Or run:  Windows 11\Drummer Studio.exe
+
+SOURCE CODE
+-----------
+  source\drummer_app.py and related modules
+  pip install -r source\requirements.txt
+  python source\drummer_app.py
+
+BUILD
+-----
+  cd source
+  .\build_installer.ps1
+
+CONTRIBUTING
+------------
+See CONTRIBUTING.md — pull requests welcome.
+
+Drummer Studio Contributors
+https://github.com (publish your repo URL here)

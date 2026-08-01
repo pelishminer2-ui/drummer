@@ -1,0 +1,63 @@
+{
+  "scan_root": "C:\\Program Files (x86)\\Toontrack\\EZDrummer",
+  "summary": {
+    "wav_samples": 6787,
+    "midi_grooves": 8591,
+    "expansions": 1,
+    "config_files": 6
+  },
+  "folders": {
+    "Sounds": {
+      "role": "Core EZDrummer 2 sample library",
+      "wav_count": 5326,
+      "subfolders": {
+        "Kick": {"wavs": 79, "instruments": ["KD50", "KD51", "KD52", "KD53", "KD54"]},
+        "SnareTop": {"wavs": 535, "instruments": ["SD51", "SD52", "SD54", "SD55", "SD60", "SD61"]},
+        "SnareBottom": {"wavs": 963, "role": "Snare bottom mic bleed (kick + snare)"},
+        "Hats": {"wavs": 376, "instruments": ["HA50", "HA51"]},
+        "Tom1": {"wavs": 118, "instruments": ["TO50_01"]},
+        "Tom2": {"wavs": 116, "instruments": ["TO50_02"]},
+        "Tom4": {"wavs": 115, "instruments": ["TO50_04"]},
+        "OH": {"wavs": 1512, "role": "Overheads — rides, crashes, cymbals (CR50, CR51, CB50)"},
+        "Ambience": {"wavs": 1512, "role": "Room ambience mics (same sources as OH)"}
+      },
+      "config": "Sounds/soundstats (279 KB) — velocity layer + multi-mic sample map"
+    },
+    "EZX_Cocktail": {
+      "role": "Latin expansion — Baiao, Samba grooves + dedicated kit",
+      "wav_count": 1461,
+      "configs": ["uberconf", "GM-padconf", "kitconf", "micconf"],
+      "ui_assets": ["bmp*.png kit photos", "EZX-Keys.jpg MIDI map", "EZXCocktail.pdf manual"],
+      "kits": ["Default Kit (Damped Brushes)", "Open Brushes", "Sticks"]
+    },
+    "Midi": {
+      "role": "Groove and fill library",
+      "midi_count": 8591,
+      "libraries": {
+        "01@EZD_POP#ROCK": {"count": 8550, "genres": ["POP/ROCK", "FUNK/ROCK", "MOTOWN", "BALLAD", "FILLS", "SIDESTICK"]},
+        "04@EZX_COCKTAIL": {"count": 39, "genres": ["BAIAO", "SAMBA"]},
+        "02@EZD_DEMOS": {"count": 2, "files": ["EZ Demo Shuffle - 85BPM.mid", "EZ Demo Straight - 120BPM.mid"]},
+        "20@_USER_LIBRARIES": {"count": 0, "role": "Drop custom MIDI here"},
+        "MY MIDIFILES": {"count": 0, "role": "User groove folder"}
+      }
+    },
+    "HelpMenu": {
+      "role": "Documentation and quick tour",
+      "files": ["EZDoc.pdf", "EZCore.pdf", "EZD_QuickTour.exe", "EZKeys.jpg"]
+    }
+  },
+  "not_yet_in_drummer": {
+    "micconf_mixer": "Per-mic volume, pan, bleed routing (8 tracks)",
+    "ambience_mics": "1512 room ambience samples — not mapped to pads",
+    "oh_bleed": "Automatic overhead bleed on all hits",
+    "multiple_kicks_snares": "14 kick + 24 snare variants in core library — only default pieces loaded",
+    "kit_ui_images": "EZX PNG kit photos for visual drum kit display",
+    "quick_tour_exe": "Toontrack interactive tutorial app"
+  },
+  "integrated_in_drummer": {
+    "core_kit_loader": "Default Core Kit from Sounds/ (11 pads, snare bottom layer)",
+    "ezx_cocktail_kits": "Full uberconf + GM-padconf parsing (17 pads, 3 kits)",
+    "midi_grooves": "All 8591 grooves with pack/genre/BPM from folder names",
+    "snare_bottom_layer": "SnareBottom mic blended on snare hits"
+  }
+}

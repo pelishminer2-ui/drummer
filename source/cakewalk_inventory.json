@@ -1,0 +1,69 @@
+{
+  "scan_root": "C:\\Cakewalk Content",
+  "summary": {
+    "total_files": 6676,
+    "wav_samples": 806,
+    "midi_files": 1090,
+    "sfz_instruments": 20,
+    "ptn_patterns": 1252
+  },
+  "high_value_for_drummer": {
+    "Drum Replacer": {
+      "path": "Drum Replacer",
+      "size_mb": 494,
+      "wav_count": 768,
+      "sfz_count": 20,
+      "kits": ["Funktight", "MetalHead", "Roots", "WholeLotta"],
+      "pieces_per_kit": ["Kick", "Snare", "Hi Toms", "Lo Toms", "Floor Toms"],
+      "format": "SFZ + WAV (ChocolateAudio 2013)",
+      "features": ["Velocity layers", "L/R round-robin", "GM MIDI note mapping"],
+      "integrated": true
+    },
+    "MIDI Library": {
+      "path": "MIDI Library",
+      "midi_count": 1090,
+      "drum_content": {
+        "Drums": 73,
+        "Groove Monkee": 705,
+        "SmartLoops": 79
+      },
+      "genres": ["Rock", "Jazz", "Blues", "Metal", "Funk", "HipHop", "House", "Techno", "Country", "World"],
+      "integrated": true
+    }
+  },
+  "not_yet_integrated": {
+    "PTN MIDI Patterns": {
+      "path": "Cakewalk Core\\PTN MIDI Patterns\\Drums",
+      "count": 1252,
+      "genres": ["Techno", "Breaks", "Reggae", "Basic", "House", "DNB", "HipHop", "Fill"],
+      "format": "Proprietary .PTN binary — not standard MIDI",
+      "note": "Would need Cakewalk PTN decoder or export via Cakewalk DAW"
+    },
+    "Step Sequencer Patterns": {
+      "path": "Cakewalk Core\\Step Sequencer Patterns",
+      "count": 65,
+      "format": "Proprietary .SSP",
+      "folders": ["Funky", "Groovy", "Straight", "Templates"]
+    },
+    "Metronome Samples": {
+      "path": "Cakewalk Core\\Metronome",
+      "wav_count": 38,
+      "note": "Click/percussion sounds useful for metronome feature"
+    },
+    "Demo Projects": {
+      "path": "Demo Projects",
+      "size_mb": 1026,
+      "format": "Cakewalk .cwp project files — audio embedded in projects"
+    },
+    "Arpeggiator Patterns": {
+      "path": "Cakewalk Core\\Arpeggiator Patterns",
+      "count": 521,
+      "format": ".arp — not drum-focused"
+    }
+  },
+  "other_folders": {
+    "Cakewalk Themes": "UI themes only",
+    "Audio Library": "Empty placeholder",
+    "FX Chain Presets": "Mixing presets, not drums"
+  }
+}
