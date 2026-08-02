@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -173,6 +174,7 @@ def find_matches(
     audio_loops: list[AudioLoopInfo],
     limit: int = 60,
     bpm_prefilter: int = 900,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> list[GrooveMatch]:
     detected = analysis.bpm
     conf = analysis.bpm_confidence
@@ -259,7 +261,10 @@ def find_matches(
             )
         )
 
-    for kind, path, name, genre, bpm_label, _, partial in prefilter:
+    total_prefilter = len(prefilter)
+    for idx, (kind, path, name, genre, bpm_label, _, partial) in enumerate(prefilter, start=1):
+        if on_progress and (idx == 1 or idx % 25 == 0 or idx == total_prefilter):
+            on_progress(idx, total_prefilter)
         _add(kind, path, name, genre, bpm_label, partial=partial)
 
     candidates.sort(key=lambda m: (-m.score, m.bpm_delta, m.name.lower()))

@@ -1507,7 +1507,7 @@ class DrummerStudioApp(_TkBase):
                 def scan_status(msg: str) -> None:
                     self.after(0, lambda m=msg: self.match_status.set(m))
 
-                scan_status("Scanning F:\\Drummer\\Libraries …")
+                scan_status(f"Scanning {libraries_root()} …")
                 midi_grooves, audio_loops = self._all_grooves_for_match()
                 if not midi_grooves and not audio_loops:
                     self.after(0, lambda: self._finish_groove_matches([], no_library=True))
@@ -1520,9 +1520,19 @@ class DrummerStudioApp(_TkBase):
 
                 warm_bpm_cache([g.path for g in midi_grooves], on_progress=bpm_progress)
                 scan_status(
-                    f"Ranking {total:,} MIDI + {len(audio_loops):,} loops by BPM, rhythm, and feel …"
+                    f"Ranking {total:,} MIDI + {len(audio_loops):,} loops — results go to Matches Found tab …"
                 )
-                matches = find_matches(analysis, midi_grooves, audio_loops, limit=60)
+
+                def rank_progress(done: int, tot: int) -> None:
+                    scan_status(f"Scoring candidates ({done:,}/{tot:,}) — Matches Found tab when done …")
+
+                matches = find_matches(
+                    analysis,
+                    midi_grooves,
+                    audio_loops,
+                    limit=60,
+                    on_progress=rank_progress,
+                )
                 self.after(0, lambda m=matches: self._finish_groove_matches(m))
             except Exception as exc:
                 self.after(0, lambda e=exc: self._finish_groove_matches([], error=e))
@@ -1552,10 +1562,14 @@ class DrummerStudioApp(_TkBase):
             self.browser_notebook.select(self._matches_tab)
         if matches:
             top = matches[0]
+            self.match_status.set(
+                f"{len(matches)} matches in Matches Found tab — best: {top.name} ({top.score:.0f}%)"
+            )
             self.groove_status.set(
                 f"Best match: {top.name}  —  {top.score:.0f}%  (see Matches Found tab)"
             )
         else:
+            self.match_status.set("No matches found — try a longer take or different tempo")
             self.groove_status.set("No matches found")
 
     def _stop_kit_groove_visual(self) -> None:

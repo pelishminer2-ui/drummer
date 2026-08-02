@@ -70,9 +70,9 @@ $stampLines = @(
     "Built:       $BuiltAt",
     "Manifest:    Libraries\manifest.json (schema synced)",
     "Executables:",
-    "  Windows 10\Drummer Studio.exe",
-    "  Windows 11\Drummer Studio.exe",
-    "  source\dist\Drummer.exe"
+    "  Windows 10\Drummer Studio.exe (+ _internal folder)",
+    "  Windows 11\Drummer Studio.exe (+ _internal folder)",
+    "  source\dist\Drummer\Drummer.exe"
 )
 $stampLines | Set-Content -Path $Stamp -Encoding UTF8
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import mido
 import numpy as np
 
+from mido_compat import MIDI_READ_ERRORS
 from wav_io import load_audio_mono
 
 GRID = 32  # 32nd-note grid over 2 bars (4/4)
@@ -62,7 +63,7 @@ def rhythm_signature_from_midi(path: Path, bpm_hint: float = 120.0) -> np.ndarra
     sig = np.zeros(GRID, dtype=np.float32)
     try:
         midi = mido.MidiFile(str(path))
-    except (OSError, mido.MidiFileError):
+    except MIDI_READ_ERRORS:
         return sig
 
     tempo = 500000

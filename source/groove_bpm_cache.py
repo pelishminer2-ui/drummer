@@ -11,6 +11,7 @@ from pathlib import Path
 import mido
 
 from library_scanner import libraries_root
+from mido_compat import MIDI_READ_ERRORS
 
 _CACHE_NAME = "groove-tempo-cache.json"
 _BPM_IN_TEXT = re.compile(r"(\d{2,3})\s*-\s*(\d{2,3})\s*bpm", re.I)
@@ -62,7 +63,7 @@ def _read_midi_tempo_bpm(path_str: str, mtime_ns: int) -> float | None:
         return None
     try:
         midi = mido.MidiFile(str(path))
-    except (OSError, mido.MidiFileError, ValueError):
+    except MIDI_READ_ERRORS:
         return None
     tempo = 500000
     for track in midi.tracks:

@@ -8,6 +8,7 @@ import mido
 
 from kit_ui import PAD_TO_PIECE
 from library_parser import DrumKit
+from mido_compat import MIDI_READ_ERRORS
 from midi_drum_map import resolve_pad_name
 
 PIECE_ALIASES: dict[str, str] = {
@@ -29,7 +30,7 @@ def extract_groove_visual_hits(path: Path, kit: DrumKit) -> tuple[list[tuple[flo
     """Return (time_sec, kit_piece) hits and total groove length in seconds."""
     try:
         midi = mido.MidiFile(str(path))
-    except (OSError, mido.MidiFileError):
+    except MIDI_READ_ERRORS:
         return [], 0.0
 
     tempo = 500000

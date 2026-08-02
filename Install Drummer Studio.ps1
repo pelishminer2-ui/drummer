@@ -1,23 +1,27 @@
 $ErrorActionPreference = "Stop"
 $AppName = "Drummer Studio"
 $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\Drummer Studio"
-$SourceExe = Join-Path $PSScriptRoot "source\dist\Drummer.exe"
-$Desktop = [Environment]::GetFolderPath("Desktop")
-$StartMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+$SourceDir = Join-Path $PSScriptRoot "source\dist\Drummer"
+$SourceExe = Join-Path $SourceDir "Drummer.exe"
 
 if (-not (Test-Path $SourceExe)) {
     Write-Host "Building application first..."
     & (Join-Path $PSScriptRoot "source\build_installer.ps1")
-    $SourceExe = Join-Path $PSScriptRoot "source\dist\Drummer.exe"
+    $SourceExe = Join-Path $SourceDir "Drummer.exe"
 }
 
 if (-not (Test-Path $SourceExe)) {
-    throw "Drummer.exe not found. Run source\build_installer.ps1 first."
+    throw "Drummer build folder not found. Run source\build_installer.ps1 first."
 }
 
 Write-Host "Installing $AppName to $InstallDir"
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Copy-Item -Force $SourceExe (Join-Path $InstallDir "Drummer Studio.exe")
+if (Test-Path $InstallDir) {
+    Remove-Item -Recurse -Force $InstallDir
+}
+Copy-Item -Recurse -Force $SourceDir $InstallDir
+Rename-Item -Path (Join-Path $InstallDir "Drummer.exe") -NewName "Drummer Studio.exe" -Force
+$Desktop = [Environment]::GetFolderPath("Desktop")
+$StartMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
 foreach ($doc in @("Read Me.txt", "LICENSE", "README.md", "CONTRIBUTING.md")) {
     $src = Join-Path $PSScriptRoot $doc
     if (Test-Path $src) {
