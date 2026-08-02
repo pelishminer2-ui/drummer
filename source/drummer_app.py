@@ -59,7 +59,7 @@ except ImportError:
     ImageTk = None
 
 APP_NAME = "Drummer Studio"
-APP_VERSION = "2.6.14"
+APP_VERSION = "2.6.19"
 PUBLISHER = "Drummer Studio Contributors"
 LICENSE_NAME = "MIT"
 LICENSE_URL = "https://opensource.org/licenses/MIT"
@@ -509,18 +509,20 @@ class DrummerStudioApp(_TkBase):
         body.rowconfigure(0, weight=1)
 
         self.matches_tree = ttk.Treeview(
-            body, columns=("genre", "bpm", "score", "rhythm", "name"), show="headings", selectmode="browse"
+            body, columns=("rank", "genre", "bpm", "score", "rhythm", "name"), show="headings", selectmode="browse"
         )
+        self.matches_tree.heading("rank", text="#")
         self.matches_tree.heading("genre", text="Genre")
         self.matches_tree.heading("bpm", text="BPM")
-        self.matches_tree.heading("score", text="Match")
+        self.matches_tree.heading("score", text="Match %")
         self.matches_tree.heading("rhythm", text="Feel")
         self.matches_tree.heading("name", text="Groove")
-        self.matches_tree.column("genre", width=80)
-        self.matches_tree.column("bpm", width=55)
-        self.matches_tree.column("score", width=45)
-        self.matches_tree.column("rhythm", width=45)
-        self.matches_tree.column("name", width=160)
+        self.matches_tree.column("rank", width=28, anchor="center")
+        self.matches_tree.column("genre", width=72)
+        self.matches_tree.column("bpm", width=50)
+        self.matches_tree.column("score", width=52, anchor="e")
+        self.matches_tree.column("rhythm", width=42)
+        self.matches_tree.column("name", width=150)
         self.matches_tree.grid(row=0, column=0, sticky="nsew")
         self.matches_tree.bind("<Double-1>", lambda _e: self.play_selected_match())
         if _DND_AVAILABLE:
@@ -542,32 +544,44 @@ class DrummerStudioApp(_TkBase):
         label = "Matches Found" if count is None else f"Matches Found ({count})"
         self.browser_notebook.tab(self._matches_tab, text=label)
 
+    def _sort_matches(self, matches: list[GrooveMatch]) -> list[GrooveMatch]:
+        return sorted(matches, key=lambda m: (-m.score, m.bpm_delta, m.name.lower()))
+
     def _refresh_matches_tab(self, matches: list[GrooveMatch]) -> None:
         if not hasattr(self, "matches_tree"):
             return
-        self._last_matches = matches
+        ordered = self._sort_matches(matches)
+        self._last_matches = ordered
         self.matches_tree.delete(*self.matches_tree.get_children())
         seen_iids: set[str] = set()
-        for m in matches:
+        first_iid: str | None = None
+        for rank, m in enumerate(ordered, start=1):
             iid = f"{m.kind}:{m.path.resolve()}"
             if iid in seen_iids:
                 continue
             seen_iids.add(iid)
+            if first_iid is None:
+                first_iid = iid
             self.matches_tree.insert(
                 "",
                 "end",
                 iid=iid,
-                values=(m.genre[:20], m.bpm_label, f"{m.score:.0f}", f"{m.rhythm_score:.0%}", m.name),
+                values=(rank, m.genre[:20], m.bpm_label, f"{m.score:.0f}%", f"{m.rhythm_score:.0%}", m.name),
             )
+        if first_iid:
+            self.matches_tree.selection_set(first_iid)
+            self.matches_tree.focus(first_iid)
+            self.matches_tree.see(first_iid)
         if self._last_analysis:
             a = self._last_analysis
             self.matches_context.set(
-                f"Your take: ~{a.bpm} BPM  •  Key {a.key_root} {a.key_mode}  •  {a.duration_sec:.1f}s"
+                f"Your take: ~{a.bpm} BPM  •  Key {a.key_root} {a.key_mode}  •  "
+                f"{a.duration_sec:.1f}s  •  sorted best → worst by Match %"
             )
-        if matches:
-            top = matches[0]
+        if ordered:
+            top = ordered[0]
             self.matches_status.set(
-                f"{len(matches)} matches  •  Best: {top.name} ({top.score:.0f}%)  •  drag into your DAW"
+                f"{len(ordered)} matches (best first)  •  #1: {top.name} ({top.score:.0f}%)  •  drag into your DAW"
             )
         else:
             self.matches_status.set("No matches found — try a longer recording or different tempo")
@@ -1285,13 +1299,33 @@ class DrummerStudioApp(_TkBase):
     def _record_guitar(self) -> None:
         out = libraries_root() / "User-Recordings" / "guitar_take.wav"
         secs = max(4, min(30, int(self._record_seconds.get())))
+        self._stop_all_playback()
         self._recording_guitar = True
-        self.match_status.set(f"Recording {secs}s from microphone — play guitar or any instrument...")
+        self.match_status.set("Count-in — built-in metronome (5 ticks, then recording)…")
         self.update_idletasks()
+
+        def on_tick(remaining: int) -> None:
+            self.after(
+                0,
+                lambda r=remaining: self.match_status.set(
+                    f"Count-in: {r}…  (clicks in track, then {secs}s recording)"
+                ),
+            )
+
+        def on_recording_start() -> None:
+            self.after(
+                0,
+                lambda: self.match_status.set(f"Recording {secs}s — play now…"),
+            )
 
         def work() -> None:
             try:
-                record_guitar(out, duration_sec=float(secs))
+                record_guitar(
+                    out,
+                    duration_sec=float(secs),
+                    on_count_in_tick=on_tick,
+                    on_recording_start=on_recording_start,
+                )
             except Exception as exc:
                 def fail(e=exc) -> None:
                     self._recording_guitar = False
@@ -1307,6 +1341,7 @@ class DrummerStudioApp(_TkBase):
             def recorded() -> None:
                 self._recording_guitar = False
                 self._last_recording_path = out
+                self.match_status.set(f"Recorded {secs}s (+ 5s count-in) — analyzing…")
                 self._analyze_match_source(out, from_record=True)
 
             self.after(0, recorded)
@@ -1395,7 +1430,12 @@ class DrummerStudioApp(_TkBase):
 
         def work() -> None:
             try:
-                analysis = analyze_file(path)
+                from audio_analyze import DEFAULT_COUNT_IN_SEC, analyze_file
+
+                trim = DEFAULT_COUNT_IN_SEC if from_record else 0.0
+                if not trim and path.name == "guitar_take.wav":
+                    trim = DEFAULT_COUNT_IN_SEC
+                analysis = analyze_file(path, trim_leading_sec=trim)
             except Exception as exc:
                 def fail(e=exc) -> None:
                     self._analyzing_guitar = False
@@ -1427,39 +1467,9 @@ class DrummerStudioApp(_TkBase):
         self._analyze_match_source(path)
 
     def _all_grooves_for_match(self) -> tuple[list, list]:
-        from groove_catalog import scan_all_grooves
+        from match_catalog import scan_libraries_for_match
 
-        loop_by_path: dict[Path, object] = {}
-        lib_root = libraries_root()
-        seen_loop_dirs: set[Path] = set()
-
-        def _add_loops_from(path: Path) -> None:
-            resolved = path.resolve()
-            if not path.is_dir() or resolved in seen_loop_dirs:
-                return
-            seen_loop_dirs.add(resolved)
-            extra = AudioLoopLibrary()
-            extra.scan(path)
-            for loop in extra.loops:
-                loop_by_path[loop.path.resolve()] = loop
-
-        for lib in self.detected:
-            _add_loops_from(lib.path / "Loops")
-            for entry in load_manifest().get("libraries", []):
-                if entry.get("id") == lib.library_id:
-                    lf = entry.get("loops_folder")
-                    if lf:
-                        _add_loops_from(lib_root / lf)
-
-        demo_loops = self.demo_library.to_audio_loops()
-        for loop in demo_loops:
-            loop_by_path[loop.path.resolve()] = loop
-
-        if self.current_detected and self.current_detected.library_type in STREAM_LOOP_TYPES:
-            for loop in self.stream_loop_library.to_audio_loops():
-                loop_by_path[loop.path.resolve()] = loop
-
-        return scan_all_grooves(), list(loop_by_path.values())
+        return scan_libraries_for_match(libraries_root())
 
     def _find_groove_matches(self) -> None:
         if self._recording_guitar:
@@ -1486,16 +1496,32 @@ class DrummerStudioApp(_TkBase):
         if self._match_searching:
             return
         self._match_searching = True
-        self.match_status.set("Scanning library and ranking matches — please wait...")
+        self.match_status.set("Scanning all of Libraries for matches — please wait...")
         self.update_idletasks()
         analysis = self._last_analysis
 
         def work() -> None:
             try:
+                from groove_bpm_cache import warm_bpm_cache
+
+                def scan_status(msg: str) -> None:
+                    self.after(0, lambda m=msg: self.match_status.set(m))
+
+                scan_status("Scanning F:\\Drummer\\Libraries …")
                 midi_grooves, audio_loops = self._all_grooves_for_match()
                 if not midi_grooves and not audio_loops:
                     self.after(0, lambda: self._finish_groove_matches([], no_library=True))
                     return
+
+                total = len(midi_grooves)
+
+                def bpm_progress(done: int, tot: int) -> None:
+                    scan_status(f"Reading groove tempos ({done:,}/{tot:,}) …")
+
+                warm_bpm_cache([g.path for g in midi_grooves], on_progress=bpm_progress)
+                scan_status(
+                    f"Ranking {total:,} MIDI + {len(audio_loops):,} loops by BPM, rhythm, and feel …"
+                )
                 matches = find_matches(analysis, midi_grooves, audio_loops, limit=60)
                 self.after(0, lambda m=matches: self._finish_groove_matches(m))
             except Exception as exc:

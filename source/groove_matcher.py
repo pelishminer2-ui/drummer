@@ -10,6 +10,7 @@ import numpy as np
 
 from audio_analyze import AudioAnalysis, _mfcc_profile
 from audio_loops import AudioLoopInfo
+from groove_bpm_cache import groove_bpm_label
 from gpu_backend import batch_gpu_embeddings, batch_gpu_mfcc, embedding_similarity
 from midi_grooves import GrooveInfo
 from rhythm_fingerprint import fingerprint_file, rhythm_similarity
@@ -123,6 +124,18 @@ def _energy_match(analysis: AudioAnalysis, genre: str, name: str) -> float:
     return 0.5
 
 
+def _is_partial_stem(name: str) -> bool:
+    stem = name.lower()
+    if "fill" in stem and "groove" not in stem:
+        return True
+    if "_hats_" in stem or stem.startswith("hats_"):
+        if not any(x in stem for x in ("kick", "snare", "groove", "beat", "full")):
+            return True
+    if "_ride_" in stem and "groove" not in stem:
+        return True
+    return False
+
+
 def _combined_score(
     bpm_delta: float,
     bpm_conf: float,
@@ -131,22 +144,26 @@ def _combined_score(
     feel: float,
     energy: float,
     name: str,
+    *,
+    partial: bool = False,
 ) -> float:
-    bpm_score = max(0.0, 100.0 - bpm_delta * 2.5) * (0.5 + 0.5 * bpm_conf)
+    bpm_score = max(0.0, 100.0 - bpm_delta * 3.0) * (0.55 + 0.45 * bpm_conf)
     rhythm_pct = rhythm * 100.0
     key_pct = key * 100.0
     feel_pct = feel * 100.0
     energy_pct = energy * 100.0
 
     total = (
-        bpm_score * 0.30
-        + rhythm_pct * 0.35
-        + key_pct * 0.15
-        + feel_pct * 0.10
-        + energy_pct * 0.10
+        bpm_score * 0.38
+        + rhythm_pct * 0.42
+        + key_pct * 0.08
+        + feel_pct * 0.07
+        + energy_pct * 0.05
     )
-    if "groove" in name.lower() and "fill" not in name.lower():
-        total += 3.0
+    if partial:
+        total *= 0.72
+    elif "groove" in name.lower() and "fill" not in name.lower():
+        total += 2.0
     return min(100.0, total)
 
 
@@ -155,23 +172,26 @@ def find_matches(
     midi_grooves: list[GrooveInfo],
     audio_loops: list[AudioLoopInfo],
     limit: int = 60,
-    bpm_prefilter: int = 400,
+    bpm_prefilter: int = 900,
 ) -> list[GrooveMatch]:
     detected = analysis.bpm
     conf = analysis.bpm_confidence
     guitar_sig = analysis.rhythm_signature
     candidates: list[GrooveMatch] = []
 
-    prelim: list[tuple[str, Path, str, str, str, float]] = []
+    prelim: list[tuple[str, Path, str, str, str, float, bool]] = []
     for g in midi_grooves:
-        d = _best_bpm_delta(detected, g.bpm)
-        prelim.append(("mid", g.path, g.name, g.genre or g.pack, g.bpm or "?", d))
+        bpm_label = groove_bpm_label(g.path, g.bpm)
+        d = _best_bpm_delta(detected, bpm_label)
+        partial = _is_partial_stem(g.name)
+        prelim.append(("mid", g.path, g.name, g.genre or g.pack, bpm_label, d, partial))
     for loop in audio_loops:
-        d = _best_bpm_delta(detected, loop.bpm)
-        prelim.append(("wav", loop.path, loop.name, loop.genre, loop.bpm or "?", d))
+        bpm_label = loop.bpm or groove_bpm_label(loop.path)
+        d = _best_bpm_delta(detected, bpm_label)
+        prelim.append(("wav", loop.path, loop.name, loop.genre, bpm_label, d, False))
 
     prelim.sort(key=lambda x: x[5])
-    prefilter = prelim[:bpm_prefilter]
+    prefilter = prelim[: min(bpm_prefilter, len(prelim))]
 
     wav_items: list[tuple[Path, np.ndarray, int]] = []
     if any(k == "wav" for k, *_ in prefilter):
@@ -189,11 +209,21 @@ def find_matches(
     gpu_mfcc_map = batch_gpu_mfcc(wav_items)
     gpu_emb_map = batch_gpu_embeddings(wav_items)
 
-    def _add(kind: str, path: Path, name: str, genre: str, bpm_label: str) -> None:
+    def _add(
+        kind: str,
+        path: Path,
+        name: str,
+        genre: str,
+        bpm_label: str,
+        *,
+        partial: bool = False,
+    ) -> None:
         delta = _best_bpm_delta(detected, bpm_label)
         bpm_use = _best_bpm_for_label(detected, bpm_label)
         fp = np.array(fingerprint_file(str(path.resolve()), kind, bpm_use), dtype=np.float32)
         rhythm = rhythm_similarity(guitar_sig, fp)
+        if rhythm < 0.08 and delta > 8:
+            return
         key = _key_compatibility(analysis, genre, name)
         feel = rhythm * 0.5 + _energy_match(analysis, genre, name) * 0.5
         path_key = str(path.resolve())
@@ -213,7 +243,7 @@ def find_matches(
             elif loop_emb is not None:
                 feel = max(feel, embedding_similarity(analysis.deep_embedding, loop_emb))
         energy = _energy_match(analysis, genre, name)
-        score = _combined_score(delta, conf, rhythm, key, feel, energy, name)
+        score = _combined_score(delta, conf, rhythm, key, feel, energy, name, partial=partial)
         candidates.append(
             GrooveMatch(
                 kind=kind,
@@ -229,16 +259,14 @@ def find_matches(
             )
         )
 
-    for kind, path, name, genre, bpm_label, _ in prefilter:
-        _add(kind, path, name, genre, bpm_label)
+    for kind, path, name, genre, bpm_label, _, partial in prefilter:
+        _add(kind, path, name, genre, bpm_label, partial=partial)
 
-    candidates.sort(key=lambda m: (-m.score, m.bpm_delta))
-    seen: set[tuple[str, Path]] = set()
-    unique: list[GrooveMatch] = []
+    candidates.sort(key=lambda m: (-m.score, m.bpm_delta, m.name.lower()))
+    best: dict[tuple[str, Path], GrooveMatch] = {}
     for m in candidates:
         key = (m.kind, m.path.resolve())
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(m)
+        if key not in best or m.score > best[key].score:
+            best[key] = m
+    unique = sorted(best.values(), key=lambda m: (-m.score, m.bpm_delta, m.name.lower()))
     return unique[:limit]

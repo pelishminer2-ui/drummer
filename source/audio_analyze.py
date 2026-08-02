@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import wave
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,11 +17,107 @@ from gpu_backend import (
     project_embedding,
 )
 from rhythm_fingerprint import rhythm_signature_from_audio
-from wav_io import load_audio_mono
+from wav_io import load_audio_mono, write_wav_mono
+
+DEFAULT_COUNT_IN_SEC = 5.0
+_RECORD_SAMPLE_RATE = 44100
 
 
-def _load_wav_mono(path: Path) -> tuple[np.ndarray, int]:
-    return load_audio_mono(path)
+def _metronome_click(
+    sample_rate: int = _RECORD_SAMPLE_RATE,
+    *,
+    accent: bool = False,
+    duration_ms: float = 22.0,
+) -> np.ndarray:
+    """Built-in metronome tick for record count-in (always used)."""
+    n = max(1, int(sample_rate * duration_ms / 1000.0))
+    t = np.linspace(0.0, duration_ms / 1000.0, n, dtype=np.float32)
+    freq = 1400.0 if accent else 1000.0
+    tick = np.sin(2.0 * np.pi * freq * t) * np.exp(-t * (75.0 if accent else 95.0))
+    level = 1.0 if accent else 0.85
+    return np.clip(tick * level, -1.0, 1.0).astype(np.float32)
+
+
+def build_count_in_track(
+    seconds: float = DEFAULT_COUNT_IN_SEC,
+    sample_rate: int = _RECORD_SAMPLE_RATE,
+) -> np.ndarray:
+    """One built-in metronome click per second, prepended to recordings."""
+    total = int(max(0.0, seconds) * sample_rate)
+    if total == 0:
+        return np.zeros(0, dtype=np.float32)
+    out = np.zeros(total, dtype=np.float32)
+    for beat in range(int(seconds)):
+        click = _metronome_click(sample_rate, accent=(beat == 0))
+        start = beat * sample_rate
+        end = min(start + len(click), total)
+        out[start:end] += click[: end - start]
+    return out
+
+
+def play_count_in(
+    seconds: float = DEFAULT_COUNT_IN_SEC,
+    sample_rate: int = _RECORD_SAMPLE_RATE,
+    on_tick: Callable[[int], None] | None = None,
+) -> None:
+    """Audible built-in metronome count-in — one tick per second, then record."""
+    from audio_prep import ensure_pygame_mixer, mono_to_pygame_sound
+
+    ensure_pygame_mixer(sample_rate)
+    beats = max(0, int(seconds))
+    for beat in range(beats):
+        remaining = beats - beat
+        if on_tick:
+            on_tick(remaining)
+        click = _metronome_click(sample_rate, accent=(beat == 0))
+        sound = mono_to_pygame_sound(click, sample_rate)
+        channel = sound.play()
+        if channel is None:
+            raise RuntimeError("Metronome click could not play — check Windows volume and output device.")
+        click_dur = len(click) / sample_rate
+        end = time.monotonic() + click_dur + 0.05
+        while channel.get_busy() and time.monotonic() < end:
+            time.sleep(0.005)
+        pad = 1.0 - click_dur
+        if pad > 0 and beat < beats - 1:
+            time.sleep(pad)
+
+
+def record_guitar(
+    path: Path,
+    duration_sec: float = 8.0,
+    sample_rate: int = _RECORD_SAMPLE_RATE,
+    *,
+    count_in_sec: float = DEFAULT_COUNT_IN_SEC,
+    on_count_in_tick: Callable[[int], None] | None = None,
+    on_recording_start: Callable[[], None] | None = None,
+) -> Path:
+    try:
+        import sounddevice as sd
+    except ImportError as exc:
+        raise RuntimeError("Recording requires: pip install sounddevice") from exc
+
+    path = path.resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    play_count_in(count_in_sec, sample_rate, on_tick=on_count_in_tick)
+
+    if on_recording_start:
+        on_recording_start()
+
+    frames = int(duration_sec * sample_rate)
+    recording = sd.rec(frames, samplerate=sample_rate, channels=1, dtype="float32")
+    sd.wait()
+    mono = recording.flatten().astype(np.float32)
+
+    count_in = build_count_in_track(count_in_sec, sample_rate)
+    if len(count_in):
+        full = np.concatenate([count_in, mono])
+    else:
+        full = mono
+
+    write_wav_mono(path, full, sample_rate)
+    return path
 
 
 @dataclass
@@ -204,9 +301,13 @@ def _spectral_brightness(samples: np.ndarray, sr: int) -> float:
     return float(high / total)
 
 
-def analyze_file(path: Path) -> AudioAnalysis:
+def analyze_file(path: Path, *, trim_leading_sec: float = 0.0) -> AudioAnalysis:
     path = path.resolve()
     samples, sr = _load_wav_mono(path)
+    if trim_leading_sec > 0:
+        skip = int(trim_leading_sec * sr)
+        if skip < len(samples) - sr * 2:
+            samples = samples[skip:]
     bpm, confidence = _estimate_bpm(samples, sr)
     duration = len(samples) / sr
 
@@ -238,25 +339,3 @@ def analyze_file(path: Path) -> AudioAnalysis:
         energy=energy,
         brightness=brightness,
     )
-
-
-def record_guitar(path: Path, duration_sec: float = 8.0, sample_rate: int = 44100) -> Path:
-    try:
-        import sounddevice as sd
-    except ImportError as exc:
-        raise RuntimeError("Recording requires: pip install sounddevice") from exc
-
-    path = path.resolve()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    frames = int(duration_sec * sample_rate)
-    recording = sd.rec(frames, samplerate=sample_rate, channels=1, dtype="float32")
-    sd.wait()
-    mono = recording.flatten()
-    pcm = (np.clip(mono, -1.0, 1.0) * 32767).astype(np.int16)
-
-    with wave.open(str(path), "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm.tobytes())
-    return path

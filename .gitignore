@@ -26,6 +26,7 @@ Libraries/_staging/
 Libraries/MT-Wild-Drums/
 Libraries/Demo-Tracks/
 Libraries/User-Exports/
+Libraries/groove-tempo-cache.json
 
 # Track library manifest (samples stay local)
 !Libraries/manifest.json

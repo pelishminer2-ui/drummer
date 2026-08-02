@@ -2,6 +2,20 @@
 
 All notable changes to Drummer Studio are documented here.
 
+## [2.6.17] — 2026-08-02
+
+### Record count-in metronome
+- **5-second built-in metronome** before mic capture (accent on beat 1)
+- Ticks play through **pygame** (audible on Windows; same output as kit sounds)
+- Count-in is **prepended to the saved WAV** as well as heard in speakers
+- Groove playback stops before count-in begins
+
+## [2.6.15] — 2026-08-02
+
+### Groove playback fix
+- MIDI preview no longer silent when mixer faders are down (Dry preset)
+- Auto re-render at unity gain when faders would mute the groove
+
 ## [2.6.14] — 2026-08-02
 
 ### Match — record, import, or select any track

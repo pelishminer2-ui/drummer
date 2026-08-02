@@ -134,7 +134,14 @@ def render_midi_to_buffer(
     end_sec = events[-1][0] + _TAIL_PAD_SEC
     total_frames = int(end_sec * sample_rate) + sample_rate
 
-    def _mix(relax_clicks: bool) -> tuple[np.ndarray, int]:
+    def _mix(
+        relax_clicks: bool,
+        *,
+        volumes: dict[str, float] | None = None,
+        master: float | None = None,
+    ) -> tuple[np.ndarray, int]:
+        vol = volumes if volumes is not None else ch_vol
+        mst = master if master is not None else master_volume
         mix = np.zeros(total_frames, dtype=np.float32)
         hits = 0
         for sec, note, velocity in events:
@@ -152,7 +159,7 @@ def render_midi_to_buffer(
             if start >= total_frames:
                 continue
             length = min(len(audio), total_frames - start)
-            gain = _hit_gain(pad.name, velocity, ch_vol, master_volume)
+            gain = _hit_gain(pad.name, velocity, vol, mst)
             if relax_clicks and note in {60, 84}:
                 gain *= 0.35
             mix[start : start + length] += audio[:length] * gain
@@ -169,9 +176,18 @@ def render_midi_to_buffer(
             "It may be a bass line, synth lead, or percussion-only groove."
         )
 
+    peak = float(np.max(np.abs(mix)))
+    if peak < 1e-6 and (ch_vol or master_volume != 1.0):
+        mix, hits = _mix(relax_clicks=False, volumes={}, master=1.0)
+        if float(np.max(np.abs(mix))) < 1e-6:
+            mix, hits = _mix(relax_clicks=True, volumes={}, master=1.0)
+        peak = float(np.max(np.abs(mix)))
+
     mix = soft_limit(mix, peak=0.82)
     if float(np.max(np.abs(mix))) < 1e-6:
-        raise ValueError("Rendered groove is silent — check mixer fader levels.")
+        raise ValueError(
+            "Rendered groove is silent — no samples matched this MIDI for the current kit."
+        )
 
     tail_fade = min(len(mix), int(sample_rate * 0.02))
     if tail_fade > 1:

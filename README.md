@@ -1,6 +1,6 @@
 # Drummer Studio
 
-**Free, open-source drum studio software** for Windows — v**2.6.14**
+**Free, open-source drum studio software** for Windows — v**2.6.17**
 
 Drummer Studio is a standalone drum player with a visual kit, groove browser, AI-powered match finder, and mixer. Sample libraries live under `Libraries/` next to the app.
 
