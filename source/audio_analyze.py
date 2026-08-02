@@ -16,7 +16,11 @@ from gpu_backend import (
     project_embedding,
 )
 from rhythm_fingerprint import rhythm_signature_from_audio
-from wav_io import load_wav_mono
+from wav_io import load_audio_mono
+
+
+def _load_wav_mono(path: Path) -> tuple[np.ndarray, int]:
+    return load_audio_mono(path)
 
 
 @dataclass
@@ -45,7 +49,9 @@ _NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
 def _load_wav_mono(path: Path) -> tuple[np.ndarray, int]:
-    return load_wav_mono(path)
+    from wav_io import load_audio_mono
+
+    return load_audio_mono(path)
 
 
 def _estimate_bpm(samples: np.ndarray, sr: int) -> tuple[float, float]:

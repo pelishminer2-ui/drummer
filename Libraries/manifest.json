@@ -1,7 +1,7 @@
 {
   "version": "1.2.0",
-  "app_version": "2.6.1",
-  "generated_at": "2026-08-02T01:46:41Z",
+  "app_version": "2.6.14",
+  "generated_at": "2026-08-02T14:50:01Z",
   "root": "F:\\Drummer\\Libraries",
   "project_root": "F:\\Drummer",
   "libraries": [
@@ -74,6 +74,24 @@
       }
     },
     {
+      "id": "cool-imports",
+      "name": "Cool Imports",
+      "folder": "Cool-Imports",
+      "type": "cool_imports",
+      "default_kit": "Cool Kit",
+      "midi_folder": "Cool-Imports/Grooves",
+      "loops_folder": "Cool-Imports/Loops",
+      "visual_from": "Latin-Percussion",
+      "playback_from": "Pack-Punk",
+      "_stats": {
+        "wav_count": 0,
+        "playable_wav_count": 0,
+        "sample_format": "audio",
+        "midi_count": 0,
+        "exists": true
+      }
+    },
+    {
       "id": "latin-percussion",
       "name": "Latin Percussion",
       "folder": "Latin-Percussion",
@@ -89,6 +107,38 @@
         "playable_wav_count": 0,
         "sample_format": "ttpw",
         "midi_count": 39,
+        "exists": true
+      }
+    },
+    {
+      "id": "metal-hitters",
+      "name": "Metal Hitters",
+      "folder": "Metal-Hitters",
+      "type": "metal_hitters",
+      "default_kit": "Metal Loops",
+      "loops_folder": "Metal-Hitters/Loops",
+      "playback_from": "Pack-Punk",
+      "_stats": {
+        "wav_count": 27,
+        "playable_wav_count": 0,
+        "sample_format": "audio",
+        "midi_count": 0,
+        "exists": true
+      }
+    },
+    {
+      "id": "monkey-alts",
+      "name": "Monkey Alts",
+      "folder": "Monkey-Alts",
+      "type": "monkey_alts",
+      "default_kit": "Alt Loops",
+      "loops_folder": "Monkey-Alts/Loops",
+      "playback_from": "Pack-Punk",
+      "_stats": {
+        "wav_count": 14,
+        "playable_wav_count": 0,
+        "sample_format": "audio",
+        "midi_count": 0,
         "exists": true
       }
     },
@@ -131,7 +181,7 @@
     "user_recordings": "User-Recordings"
   },
   "inventory": {
-    "libraries_detected": 5,
+    "libraries_detected": 8,
     "total_midi_grooves": 9681,
     "demo_tracks": 46,
     "groove_roots": [
@@ -181,8 +231,8 @@
       },
       "user_recordings": {
         "folder": "User-Recordings",
-        "exists": false,
-        "files": 0
+        "exists": true,
+        "files": 1
       }
     }
   }

@@ -135,6 +135,7 @@ def build_manifest(project_root: Path) -> dict:
             "kits",
             "kit_labels",
             "visual_from",
+            "playback_from",
         ):
             if key in base:
                 out[key] = base[key]

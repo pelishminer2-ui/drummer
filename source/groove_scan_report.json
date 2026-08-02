@@ -1,0 +1,66 @@
+{
+  "kit": "Punk Kit (Pack Punk)",
+  "total": 9681,
+  "playable": 9672,
+  "broken": 9,
+  "failure_kinds": {
+    "all notes filtered": 9
+  },
+  "top_unmapped_notes": {},
+  "broken_samples": [
+    {
+      "file": "Grooves-Extended\\Bass-Lines\\Gabba\\Gabba1_bs.mid",
+      "events": 10,
+      "error": "all notes filtered (clicks/FX only)",
+      "notes": []
+    },
+    {
+      "file": "Grooves-Extended\\Leads\\Electro\\Electro1_lead.mid",
+      "events": 12,
+      "error": "all notes filtered (clicks/FX only)",
+      "notes": []
+    },
+    {
+      "file": "Grooves-Extended\\Leads\\Electro\\NuElectro1_lead.mid",
+      "events": 4,
+      "error": "all notes filtered (clicks/FX only)",
+      "notes": []
+    },
+    {
+      "file": "Grooves-Extended\\Leads\\Electro\\NuElectro2_lead.mid",
+      "events": 5,
+      "error": "all notes filtered (clicks/FX only)",
+      "notes": []
+    },
+    {
+      "file": "Grooves-Extended\\Leads\\Gabba\\Gabba1_lead.mid",
+      "events": 24,
+      "error": "all notes filtered (clicks/FX only)",
+      "notes": []
+    },
+    {
+      "file": "Grooves-Extended\\Loops\\HipHop\\Clap.mid",
+      "events": 8,
+      "error": "all notes filtered (clicks/FX only)",
+      "notes": []
+    },
+    {
+      "file": "Grooves-Extended\\Pads\\Alt Rock\\Rock1_pad.mid",
+      "events": 12,
+      "error": "all notes filtered (clicks/FX only)",
+      "notes": []
+    },
+    {
+      "file": "Grooves-Extended\\Pads\\Electro\\Electro1_pad.mid",
+      "events": 12,
+      "error": "all notes filtered (clicks/FX only)",
+      "notes": []
+    },
+    {
+      "file": "Grooves-Extended\\Pads\\House\\USHardHse1_pad.mid",
+      "events": 12,
+      "error": "all notes filtered (clicks/FX only)",
+      "notes": []
+    }
+  ]
+}

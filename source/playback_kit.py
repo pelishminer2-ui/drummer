@@ -23,12 +23,22 @@ def best_playback_library(libraries: list[DetectedLibrary] | None = None) -> Det
     return None
 
 
-def load_playback_kit(libraries: list[DetectedLibrary] | None = None) -> tuple[DrumKit, str, str]:
-    """Return (kit, library_label, kit_label). Raises if no playable library exists."""
-    lib = best_playback_library(libraries)
-    if not lib:
-        raise RuntimeError("No playable WAV library found. Import Pack SFZ or Pack Punk.")
+def best_groove_playback_library(libraries: list[DetectedLibrary] | None = None) -> DetectedLibrary | None:
+    """Prefer folder kits for Toontrack MIDI — fewer harsh FX samples than MT Wild."""
+    libs = libraries if libraries is not None else detect_all()
+    for lib in libs:
+        if lib.playable_wav_count > 0 and lib.library_type == "folder":
+            return lib
+    for lib in libs:
+        if lib.playable_wav_count > 0 and lib.library_type == "pdk":
+            return lib
+    for lib in libs:
+        if lib.playable_wav_count > 0:
+            return lib
+    return None
 
+
+def _load_kit_from_library(lib: DetectedLibrary) -> tuple[DrumKit, str]:
     if lib.library_type == "pdk":
         from pdk_parser import list_pdk_kits, load_pdk_kit
 
@@ -52,7 +62,26 @@ def load_playback_kit(libraries: list[DetectedLibrary] | None = None) -> tuple[D
         internal = resolve_kit_name(kit_name, lib.kit_labels)
         kit = load_kit(lib.path, internal)
 
-    return kit, lib.name, kit.name if hasattr(kit, "name") else kit_name
+    kit_label = kit.name if hasattr(kit, "name") else kit_name
+    return kit, kit_label
+
+
+def load_playback_kit(libraries: list[DetectedLibrary] | None = None) -> tuple[DrumKit, str, str]:
+    """Return (kit, library_label, kit_label). Raises if no playable library exists."""
+    lib = best_playback_library(libraries)
+    if not lib:
+        raise RuntimeError("No playable WAV library found. Import Pack SFZ or Pack Punk.")
+    kit, kit_label = _load_kit_from_library(lib)
+    return kit, lib.name, kit_label
+
+
+def load_groove_playback_kit(libraries: list[DetectedLibrary] | None = None) -> tuple[DrumKit, str, str]:
+    """Clean kit for MIDI groove preview (Pack Punk preferred over MT Wild FX samples)."""
+    lib = best_groove_playback_library(libraries)
+    if not lib:
+        raise RuntimeError("No playable WAV library found. Import Pack SFZ or Pack Punk.")
+    kit, kit_label = _load_kit_from_library(lib)
+    return kit, lib.name, kit_label
 
 
 def needs_playback_fallback(detected: DetectedLibrary | None) -> bool:

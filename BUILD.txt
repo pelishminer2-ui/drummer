@@ -1,7 +1,7 @@
 ﻿Drummer Studio build stamp
 ==========================
-Version:     2.6.1
-Built:       2026-08-01 21:46:56
+Version:     2.6.14
+Built:       2026-08-02 11:14:41
 Manifest:    Libraries\manifest.json (schema synced)
 Executables:
   Windows 10\Drummer Studio.exe

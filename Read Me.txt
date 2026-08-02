@@ -1,46 +1,54 @@
-Version: 2.6.1
+Version: 2.6.14
 
-Drummer Studio â€” Free & Open Source
+Drummer Studio — Free & Open Source
 =====================================
 
-MIT License. Free for everyone â€” use, modify, share, and sell
+MIT License. Free for everyone — use, modify, share, and sell
 your own builds. See LICENSE and README.md for full terms.
 
-WHAT IT IS
-----------
-Open-source drum studio software. Application code only â€” no
-sample libraries are included in the repository.
+WHAT IT CAN DO
+--------------
+• Play drum kits — click the kit photo or use keyboard (Space kick, F snare, etc.)
+• Browse and play MIDI grooves and audio loops (Grooves tab)
+• Mixer with faders, pan, and presets (Default, Roomy, Dry)
+• Match your music to library grooves:
+    - Record Guitar (microphone)
+    - Import Track (WAV / MP3 / FLAC / OGG from disk)
+    - Match Selected (pick a loop in Grooves or Ass Kickers)
+  Results appear on the Matches Found tab — drag into Audacity or your DAW
+• Ass Kickers — demo tracks with genre filter
+• Selected Tracks — pin favorites from the active library
+• Open in Audacity after recording (optional)
+• Kit lights up with the groove during playback
 
-Libraries are stored locally under:
+LIBRARIES (local — not all included in git)
+-------------------------------------------
+Run Import-Libraries.ps1 for kits and grooves you own.
+
+Optional loop packs (download MP3s locally):
+  .\Import-Monkey-Alts.ps1    — 14 alt-rock loops
+  .\Import-Metal-Hitters.ps1  — 27 metal loops
+  .\Import-Cool-Imports.ps1   — your WAV/MP3/MIDI drop folder
+
+Libraries live under:
   F:\Drummer\Libraries
 
-Run Import-Libraries.ps1 once to copy your owned content into
-that folder using neutral names.
+Note: XLN Addictive Drums .xpak files cannot be imported — export WAV
+from your plugin/DAW and use Cool Imports instead.
 
-INSTALL
--------
+INSTALL & RUN
+-------------
   .\Install Drummer Studio.ps1
 
-Or run:  Windows 11\Drummer Studio.exe
+Or run portable:
+  Windows 11\Drummer Studio.exe
 
-IMPORT LIBRARIES
-----------------
-  .\Import-Libraries.ps1
-
-SOURCE CODE
------------
-  source\drummer_app.py and related modules
+SOURCE & BUILD
+--------------
   pip install -r source\requirements.txt
   python source\drummer_app.py
 
-BUILD
------
   cd source
   .\build_installer.ps1
 
-CONTRIBUTING
-------------
-See CONTRIBUTING.md â€” pull requests welcome.
-
-Drummer Studio Contributors
-https://github.com/pelishminer2-ui/drummer
+See README.md and CHANGELOG.md for full details.

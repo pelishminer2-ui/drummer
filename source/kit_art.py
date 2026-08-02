@@ -117,14 +117,18 @@ def _generated_kit_image():
 
 
 def load_neutral_kit_visual(library_root: Path) -> KitVisual:
-    """Kit photo + hit zones without vendor branding."""
+    """Kit photo + hit zones (Latin-Percussion kitconf when available)."""
+    from kit_ui import parse_kitconf
+
     build_neutral_kit_image()
     image_path = neutral_kit_path()
 
     kitconf = Path(__file__).resolve().parent.parent / "Libraries" / "Latin-Percussion" / "kitconf"
     if not kitconf.exists():
         kitconf = library_root / "kitconf"
-    regions = _neutral_kit_regions()
+    regions = parse_kitconf(kitconf) if kitconf.exists() else []
+    if not regions:
+        regions = _neutral_kit_regions()
 
     width, height = 827, 483
     try:

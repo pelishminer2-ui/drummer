@@ -12,12 +12,14 @@ try {
         --name "Drummer" `
         --add-data "..\LICENSE;." `
         --add-data "assets;assets" `
+        --collect-all tkinterdnd2 `
         --hidden-import PIL.Image `
         --hidden-import PIL.ImageTk `
         --hidden-import pygame.sndarray `
         --hidden-import audio_prep `
         --hidden-import groove_render `
         --hidden-import midi_drum_map `
+        --hidden-import tkinterdnd2 `
         drummer_app.py
 
     $built = Join-Path $here "dist\Drummer.exe"
@@ -28,6 +30,8 @@ try {
     foreach ($folder in @("Windows 10", "Windows 11")) {
         $destDir = Join-Path $root $folder
         New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+        # Drop leftover versioned builds (e.g. Drummer Studio 2.5.0.exe) — only one portable exe ships.
+        Get-ChildItem -Path $destDir -Filter "Drummer Studio *.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
         $dest = Join-Path $destDir "Drummer Studio.exe"
         Copy-Item -Force $built $dest
         Write-Host "Copied installer to $dest"

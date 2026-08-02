@@ -42,7 +42,10 @@ def _velocity_from_name(stem: str) -> int:
 def load_folder_kit(library_root: Path, kit_name: str = "Standard Kit") -> DrumKit:
     library_root = library_root.resolve()
     sounds = library_root / "Sounds"
-    if not sounds.is_dir():
+    kits_dir = library_root / "Kits"
+    if kits_dir.is_dir() and any(kits_dir.rglob("*.wav")):
+        sounds = kits_dir
+    elif not sounds.is_dir():
         sounds = library_root
 
     pad_samples: dict[str, list[SampleLayer]] = {}
@@ -84,6 +87,9 @@ def load_folder_kit(library_root: Path, kit_name: str = "Standard Kit") -> DrumK
 
 
 def list_folder_kits(library_root: Path) -> list[str]:
+    kits_dir = library_root / "Kits"
+    if kits_dir.is_dir() and any(kits_dir.rglob("*.wav")):
+        return ["Cool Kit"]
     p = load_folder_kit(library_root)
     if p.pads:
         return ["Punk Kit"]

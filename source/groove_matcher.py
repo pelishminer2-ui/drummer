@@ -233,4 +233,12 @@ def find_matches(
         _add(kind, path, name, genre, bpm_label)
 
     candidates.sort(key=lambda m: (-m.score, m.bpm_delta))
-    return candidates[:limit]
+    seen: set[tuple[str, Path]] = set()
+    unique: list[GrooveMatch] = []
+    for m in candidates:
+        key = (m.kind, m.path.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(m)
+    return unique[:limit]

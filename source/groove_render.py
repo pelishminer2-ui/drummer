@@ -7,14 +7,26 @@ from pathlib import Path
 import mido
 import numpy as np
 
-from audio_prep import SAMPLE_RATE, declick, load_sample_mono, resample, soft_limit
+from audio_prep import SAMPLE_RATE, load_sample_mono, resample, soft_limit
 from kit_ui import PAD_TO_PIECE
 from library_parser import DrumKit, DrumPad, SampleLayer
 from midi_drum_map import resolve_pad
-from wav_io import load_wav_mono, write_wav_mono
+from wav_io import write_wav_mono
 
 _TAIL_PAD_SEC = 1.5
 _sample_cache: dict[str, np.ndarray] = {}
+# Harsh one-shots that sound like scratches/beeps when mapped from Toontrack MIDI.
+_GROOVE_SKIP_SAMPLE_PARTS = (
+    "Stop",
+    "China",
+    "Splash",
+    "Plop",
+    "Side-Stick",
+    "Side_Stick",
+    "Tambourine",
+    "Bell",
+    "Rim",
+)
 
 
 def parse_midi_events(midi_path: Path) -> list[tuple[float, int, int]]:
@@ -37,12 +49,22 @@ def parse_midi_events(midi_path: Path) -> list[tuple[float, int, int]]:
     return events
 
 
+def _groove_safe_samples(pad: DrumPad) -> list[SampleLayer]:
+    safe = [
+        s
+        for s in pad.samples
+        if not any(part in s.path.name for part in _GROOVE_SKIP_SAMPLE_PARTS)
+    ]
+    return safe if safe else pad.samples
+
+
 def _pick_sample(pad: DrumPad, velocity: int) -> SampleLayer | None:
-    if not pad.samples:
+    samples = _groove_safe_samples(pad)
+    if not samples:
         return None
-    hard = [s for s in pad.samples if s.articulation == "H"]
-    soft = [s for s in pad.samples if s.articulation == "S"]
-    pool = hard if velocity >= 70 and hard else soft or hard or pad.samples
+    hard = [s for s in samples if s.articulation == "H"]
+    soft = [s for s in samples if s.articulation == "S"]
+    pool = hard if velocity >= 70 and hard else soft or hard or samples
     idx = min(len(pool) - 1, int((velocity / 127) * len(pool)))
     return pool[idx]
 
@@ -86,6 +108,8 @@ def _hit_gain(pad_name: str, velocity: int, channel_volume: dict[str, float], ma
     piece = PAD_TO_PIECE.get(pad_name, "Kick")
     ch_vol = channel_volume.get(piece, 1.0)
     vel = max(0.05, min(1.0, velocity / 127.0))
+    if pad_name in ("hatsCL", "hatsO1", "hatsPL"):
+        vel = min(vel, 0.78)
     return vel * ch_vol * master_volume
 
 
@@ -109,27 +133,45 @@ def render_midi_to_buffer(
 
     end_sec = events[-1][0] + _TAIL_PAD_SEC
     total_frames = int(end_sec * sample_rate) + sample_rate
-    mix = np.zeros(total_frames, dtype=np.float32)
 
-    for sec, note, velocity in events:
-        pad = resolve_pad(kit, note, groove_playback=True)
-        if not pad:
-            continue
-        sample = _pick_sample(pad, velocity)
-        if not sample or sample.path not in cache:
-            continue
+    def _mix(relax_clicks: bool) -> tuple[np.ndarray, int]:
+        mix = np.zeros(total_frames, dtype=np.float32)
+        hits = 0
+        for sec, note, velocity in events:
+            pad = resolve_pad(kit, note, groove_playback=True, allow_clicks=relax_clicks)
+            if not pad:
+                continue
+            sample = _pick_sample(pad, velocity)
+            if not sample or sample.path not in cache:
+                continue
 
-        audio = cache[sample.path]
-        if sample_rate != SAMPLE_RATE:
-            audio = resample(audio, SAMPLE_RATE, sample_rate)
-        start = int(sec * sample_rate)
-        if start >= total_frames:
-            continue
-        length = min(len(audio), total_frames - start)
-        gain = _hit_gain(pad.name, velocity, ch_vol, master_volume)
-        mix[start : start + length] += audio[:length] * gain
+            audio = cache[sample.path]
+            if sample_rate != SAMPLE_RATE:
+                audio = resample(audio, SAMPLE_RATE, sample_rate)
+            start = int(sec * sample_rate)
+            if start >= total_frames:
+                continue
+            length = min(len(audio), total_frames - start)
+            gain = _hit_gain(pad.name, velocity, ch_vol, master_volume)
+            if relax_clicks and note in {60, 84}:
+                gain *= 0.35
+            mix[start : start + length] += audio[:length] * gain
+            hits += 1
+        return mix, hits
 
-    mix = soft_limit(mix, peak=0.92)
+    mix, hits = _mix(relax_clicks=False)
+    if hits == 0:
+        mix, hits = _mix(relax_clicks=True)
+
+    if hits == 0:
+        raise ValueError(
+            "This MIDI has no drum hits for the current kit. "
+            "It may be a bass line, synth lead, or percussion-only groove."
+        )
+
+    mix = soft_limit(mix, peak=0.82)
+    if float(np.max(np.abs(mix))) < 1e-6:
+        raise ValueError("Rendered groove is silent — check mixer fader levels.")
 
     tail_fade = min(len(mix), int(sample_rate * 0.02))
     if tail_fade > 1:

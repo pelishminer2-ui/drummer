@@ -76,6 +76,15 @@ def _count_midi(root: Path | None) -> int:
     return len(list(root.rglob("*.mid")))
 
 
+def _count_audio_loops(root: Path) -> int:
+    if not root.is_dir():
+        return 0
+    exts = {".mp3", ".wav", ".ogg", ".m4a", ".flac"}
+    loops = root / "Loops"
+    search = loops if loops.is_dir() else root
+    return sum(1 for p in search.rglob("*.*") if p.suffix.lower() in exts)
+
+
 def _resolve_midi_root(libraries_root: Path, manifest_entry: dict) -> Path | None:
     midi_folder = manifest_entry.get("midi_folder")
     if not midi_folder:
@@ -106,17 +115,30 @@ def detect_all() -> list[DetectedLibrary]:
                 playable = 0
             else:
                 playable = 0
+            wav_count = _count_wavs(lib_path)
+        elif lib_type in ("monkey_alts", "metal_hitters"):
+            playable = 0
+            wav_count = _count_audio_loops(lib_path)
+        elif lib_type == "cool_imports":
+            kits_dir = lib_path / "Kits"
+            playable = count_playable_wavs(kits_dir) if kits_dir.is_dir() else 0
+            if playable == 0:
+                playable = count_playable_wavs(lib_path)
+            wav_count = _count_wavs(lib_path) + _count_audio_loops(lib_path)
         else:
             playable = _count_playable(lib_path)
+            wav_count = _count_wavs(lib_path)
 
         found.append(
             DetectedLibrary(
                 path=lib_path,
                 name=entry.get("name", folder),
                 library_id=entry.get("id", folder),
-                wav_count=_count_wavs(lib_path),
+                wav_count=wav_count,
                 playable_wav_count=playable,
-                sample_format=_sample_format(lib_path),
+                sample_format=_sample_format(lib_path)
+                if lib_type not in ("monkey_alts", "metal_hitters", "cool_imports")
+                else "audio",
                 midi_root=midi_root,
                 midi_count=midi_count,
                 library_type=lib_type,

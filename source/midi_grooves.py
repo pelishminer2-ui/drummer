@@ -169,12 +169,13 @@ class GroovePlayer:
             for loop_idx in range(PREVIEW_LOOP_COUNT):
                 if self._stop.is_set():
                     break
-                self._channel = sound.play()
-                if not self._channel:
+                channel = sound.play()
+                if not channel:
                     raise RuntimeError("Audio playback failed — check mixer / sound device.")
-                while self._channel.get_busy():
+                self._channel = channel
+                while channel.get_busy():
                     if self._stop.is_set():
-                        self._channel.stop()
+                        channel.stop()
                         break
                     time.sleep(0.05)
                 if self._stop.is_set():

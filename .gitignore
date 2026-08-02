@@ -20,6 +20,8 @@ Libraries/Patterns-PTN/
 Libraries/User-Samples/
 Libraries/User-Recordings/
 Libraries/Pack-Punk/
+Libraries/Monkey-Alts/Loops/
+Libraries/Metal-Hitters/Loops/
 Libraries/_staging/
 Libraries/MT-Wild-Drums/
 Libraries/Demo-Tracks/
@@ -45,3 +47,4 @@ Desktop.ini
 
 # Old build output
 source/build/Drummer Product Manager/
+Installers/

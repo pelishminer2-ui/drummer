@@ -4,4 +4,5 @@ numpy>=1.26.0
 pillow>=10.0.0
 sounddevice>=0.4.6
 librosa>=0.10.0
+tkinterdnd2>=0.4.2
 # Optional GPU (NVIDIA): pip install -r requirements-gpu.txt  or  .\\install-gpu.ps1
