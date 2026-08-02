@@ -1,10 +1,9 @@
-"""Parse SFZ instrument definitions (Cakewalk Drum Replacer format)."""
+"""Parse SFZ instrument definitions for Pack SFZ libraries."""
 
 from __future__ import annotations
 
-import random
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from library_parser import DrumKit, DrumPad, SampleLayer
@@ -31,8 +30,7 @@ def _parse_sfz(path: Path) -> list[SfzRegion]:
         if note_match:
             current_note = int(note_match.group(1))
 
-        chunk = block.split("<region>")[1:]
-        for region_text in chunk:
+        for region_text in block.split("<region>")[1:]:
             sample_match = re.search(r"sample\s*=\s*(.+)", region_text)
             if not sample_match:
                 continue
@@ -62,41 +60,42 @@ def _regions_to_pad(name: str, label: str, regions: list[SfzRegion]) -> DrumPad 
     if not regions:
         return None
     notes = sorted(set(r.midi_note for r in regions))
-    samples: list[SampleLayer] = []
-    for region in regions:
-        velocity = (region.lovel + region.hivel) // 2
-        samples.append(
-            SampleLayer(path=region.sample, velocity=velocity, articulation="H")
-        )
+    samples = [
+        SampleLayer(path=region.sample, velocity=(region.lovel + region.hivel) // 2, articulation="H")
+        for region in regions
+    ]
     return DrumPad(name=name, midi_notes=notes, samples=samples, label=label)
 
 
-def load_drum_replacer_kit(replacer_root: Path, kit_name: str) -> DrumKit:
-    """Load a named Cakewalk Drum Replacer kit (Funktight, MetalHead, Roots, WholeLotta)."""
-    drums_dir = replacer_root / "Drums"
-    kit_key = kit_name.lower().replace(" ", "")
+def list_sfz_kits(pack_root: Path, kit_defs: list[dict] | None = None) -> list[str]:
+    if kit_defs:
+        return [k.get("name", k.get("id", "")) for k in kit_defs if k.get("name") or k.get("id")]
+    drums_dir = pack_root / "Drums"
+    if not drums_dir.is_dir():
+        return []
+    kits: list[str] = []
+    kicks = drums_dir / "Kicks"
+    if kicks.is_dir():
+        for sfz in sorted(kicks.glob("*.sfz")):
+            kits.append(sfz.stem.replace(" Kick", ""))
+    return kits
+
+
+def _kit_prefix(pack_root: Path, kit_name: str, kit_defs: list[dict] | None) -> str:
+    if kit_defs:
+        for entry in kit_defs:
+            if entry.get("name") == kit_name or entry.get("id") == kit_name:
+                return entry.get("prefix", kit_name.replace(" ", ""))
+    return kit_name.replace(" ", "")
+
+
+def load_sfz_kit(pack_root: Path, kit_name: str, kit_defs: list[dict] | None = None) -> DrumKit:
+    prefix = _kit_prefix(pack_root, kit_name, kit_defs)
+    drums_dir = pack_root / "Drums"
     pads: dict[str, DrumPad] = {}
 
-    mappings = [
-        (drums_dir / "Kicks" / f"{kit_name} Kick.sfz", "kick", "Kick"),
-        (drums_dir / "Snares" / f"{kit_name} Snare.sfz", "snare", "Snare"),
-        (drums_dir / "Toms" / "Hi Toms" / f"{kit_name} Hitoms.sfz", "tom_hi", "High Tom"),
-        (drums_dir / "Toms" / "Lo Toms" / f"{kit_name} Lotoms.sfz", "tom_lo", "Low Tom"),
-        (drums_dir / "Toms" / "Floor Toms" / f"{kit_name} Floortoms.sfz", "tom_floor", "Floor Tom"),
-    ]
-
-    # Filename spelling quirks in the install
-    alt_names = {
-        "Funktight": {"Hitoms": "Hitoms", "Lotoms": "Lotoms", "Floortoms": "Floortoms"},
-        "MetalHead": {"Hitoms": "Hitoms", "Lotoms": "Lotoms", "Floortoms": "Floortoms"},
-        "Roots": {"Hitoms": "Hitoms", "Lotoms": "Lotoms", "Floortoms": "Floortoms"},
-        "WholeLotta": {"Hitoms": "Hitoms", "Lotoms": "Lotoms", "Floortoms": "Floortoms"},
-    }
-
-    sfz_files = list(drums_dir.rglob("*.sfz"))
-    kit_sfz = [f for f in sfz_files if kit_name.lower() in f.stem.lower()]
-
-    for sfz_path in kit_sfz:
+    sfz_files = [f for f in drums_dir.rglob("*.sfz") if prefix.lower() in f.stem.lower()]
+    for sfz_path in sfz_files:
         stem = sfz_path.stem.lower()
         if "kick" in stem:
             pad_name, label = "kick", "Kick"
@@ -110,20 +109,8 @@ def load_drum_replacer_kit(replacer_root: Path, kit_name: str) -> DrumKit:
             pad_name, label = "tom_floor", "Floor Tom"
         else:
             continue
-        regions = _parse_sfz(sfz_path)
-        pad = _regions_to_pad(pad_name, label, regions)
+        pad = _regions_to_pad(pad_name, label, _parse_sfz(sfz_path))
         if pad:
             pads[pad_name] = pad
 
-    return DrumKit(name=kit_name, root=replacer_root, pads=pads)
-
-
-def list_drum_replacer_kits(replacer_root: Path) -> list[str]:
-    kicks = replacer_root / "Drums" / "Kicks"
-    if not kicks.is_dir():
-        return []
-    kits = []
-    for sfz in sorted(kicks.glob("*.sfz")):
-        name = sfz.stem.replace(" Kick", "")
-        kits.append(name)
-    return kits
+    return DrumKit(name=kit_name, root=pack_root, pads=pads)

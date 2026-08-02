@@ -1,0 +1,189 @@
+{
+  "version": "1.2.0",
+  "app_version": "2.6.1",
+  "generated_at": "2026-08-02T01:46:41Z",
+  "root": "F:\\Drummer\\Libraries",
+  "project_root": "F:\\Drummer",
+  "libraries": [
+    {
+      "id": "pack-sfz",
+      "name": "Pack SFZ",
+      "folder": "Pack-SFZ",
+      "type": "sfz",
+      "midi_folder": "Grooves-Extended",
+      "kits": [
+        {
+          "id": "funk-tight",
+          "name": "Funk Tight",
+          "prefix": "FunkTight"
+        },
+        {
+          "id": "metal-forge",
+          "name": "Metal Forge",
+          "prefix": "MetalForge"
+        },
+        {
+          "id": "roots-groove",
+          "name": "Roots Groove",
+          "prefix": "RootsGroove"
+        },
+        {
+          "id": "classic-rock",
+          "name": "Classic Rock",
+          "prefix": "ClassicRock"
+        }
+      ],
+      "_stats": {
+        "wav_count": 1360,
+        "playable_wav_count": 1360,
+        "sample_format": "wave",
+        "midi_count": 1090,
+        "exists": true
+      }
+    },
+    {
+      "id": "mt-wild-drums",
+      "name": "MT Wild Drums",
+      "folder": "MT-Wild-Drums",
+      "type": "pdk",
+      "pdk_file": "MT-PowerDrumKit-Content.pdk",
+      "default_kit": "MT Power Drum Kit",
+      "midi_folder": "Grooves",
+      "loops_folder": "Grooves-Extended",
+      "_stats": {
+        "wav_count": 158,
+        "playable_wav_count": 158,
+        "sample_format": "wave",
+        "midi_count": 8591,
+        "exists": true
+      }
+    },
+    {
+      "id": "pack-punk",
+      "name": "Pack Punk",
+      "folder": "Pack-Punk",
+      "type": "folder",
+      "default_kit": "Punk Kit",
+      "loops_folder": "Pack-Punk/Loops",
+      "_stats": {
+        "wav_count": 741,
+        "playable_wav_count": 109,
+        "sample_format": "wave",
+        "midi_count": 0,
+        "exists": true
+      }
+    },
+    {
+      "id": "latin-percussion",
+      "name": "Latin Percussion",
+      "folder": "Latin-Percussion",
+      "type": "wav",
+      "midi_folder": "Grooves/Latin-Grooves",
+      "kit_labels": {
+        "Default Kit (Damped Brushes)": "Brushes \u2014 Tight",
+        "Open Brushes": "Brushes \u2014 Open",
+        "Sticks": "Sticks"
+      },
+      "_stats": {
+        "wav_count": 1461,
+        "playable_wav_count": 0,
+        "sample_format": "ttpw",
+        "midi_count": 39,
+        "exists": true
+      }
+    },
+    {
+      "id": "studio-core",
+      "name": "Studio Core",
+      "folder": "Studio-Core",
+      "type": "wav",
+      "default_kit": "Standard Kit",
+      "midi_folder": "Grooves",
+      "kit_labels": {
+        "Default Core Kit": "Standard Kit"
+      },
+      "_stats": {
+        "wav_count": 5326,
+        "playable_wav_count": 0,
+        "sample_format": "ttpw",
+        "midi_count": 8591,
+        "exists": true
+      }
+    }
+  ],
+  "groove_roots": [
+    {
+      "name": "Main Grooves",
+      "folder": "Grooves"
+    },
+    {
+      "name": "Extended Grooves",
+      "folder": "Grooves-Extended"
+    }
+  ],
+  "extras": {
+    "click_sounds": "Click-Sounds",
+    "patterns_ptn": "Patterns-PTN",
+    "user_samples": "User-Samples",
+    "user_grooves": "Grooves/User-Projects",
+    "demo_tracks": "Demo-Tracks",
+    "user_exports": "User-Exports",
+    "user_recordings": "User-Recordings"
+  },
+  "inventory": {
+    "libraries_detected": 5,
+    "total_midi_grooves": 9681,
+    "demo_tracks": 46,
+    "groove_roots": [
+      {
+        "name": "Main Grooves",
+        "folder": "Grooves",
+        "exists": true,
+        "midi_count": 8591
+      },
+      {
+        "name": "Extended Grooves",
+        "folder": "Grooves-Extended",
+        "exists": true,
+        "midi_count": 1090
+      }
+    ],
+    "extras": {
+      "click_sounds": {
+        "folder": "Click-Sounds",
+        "exists": true,
+        "files": 38
+      },
+      "patterns_ptn": {
+        "folder": "Patterns-PTN",
+        "exists": true,
+        "files": 626
+      },
+      "user_samples": {
+        "folder": "User-Samples",
+        "exists": false,
+        "files": 0
+      },
+      "user_grooves": {
+        "folder": "Grooves/User-Projects",
+        "exists": true,
+        "files": 0
+      },
+      "demo_tracks": {
+        "folder": "Demo-Tracks",
+        "exists": true,
+        "files": 47
+      },
+      "user_exports": {
+        "folder": "User-Exports",
+        "exists": true,
+        "files": 1
+      },
+      "user_recordings": {
+        "folder": "User-Recordings",
+        "exists": false,
+        "files": 0
+      }
+    }
+  }
+}

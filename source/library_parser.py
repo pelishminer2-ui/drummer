@@ -1,4 +1,4 @@
-"""Parse Toontrack EZDrummer kit configs and WAV sample libraries."""
+"""Parse kit configs and WAV sample libraries."""
 
 from __future__ import annotations
 
@@ -232,8 +232,8 @@ CORE_GM_NOTES: dict[str, list[int]] = {
 }
 
 
-def _load_core_ezdrummer_kit(sounds_dir: Path) -> dict[str, DrumPad]:
-    """Build the default EZDrummer 2 core kit from Sounds/ folders."""
+def _load_core_studio_kit(sounds_dir: Path) -> dict[str, DrumPad]:
+    """Build the default studio core kit from Sounds/ folders."""
     pieces = [
         ("kickR", "Kick", "KD50", "FH_R", "Kick"),
         ("snareR", "SnareTop", "SD51", "FH_R", "Snare"),
@@ -266,7 +266,7 @@ def _load_core_ezdrummer_kit(sounds_dir: Path) -> dict[str, DrumPad]:
 
 
 def _fallback_gm_pads(sounds_dir: Path) -> dict[str, DrumPad]:
-    core = _load_core_ezdrummer_kit(sounds_dir)
+    core = _load_core_studio_kit(sounds_dir)
     if core:
         return core
     folder_map = {
@@ -308,7 +308,7 @@ def load_kit(library_root: Path, kit_name: str | None = None) -> DrumKit:
 
     if not drumsets:
         pads = _fallback_gm_pads(sounds_dir)
-        kit_label = "Default Core Kit" if (library_root / "Sounds").is_dir() else library_root.name
+        kit_label = "Standard Kit" if (library_root / "Sounds").is_dir() else library_root.name
         return DrumKit(name=kit_label, root=library_root, pads=pads)
 
     chosen = kit_name if kit_name in drumsets else next(iter(drumsets))
@@ -335,11 +335,19 @@ def load_kit(library_root: Path, kit_name: str | None = None) -> DrumKit:
     return DrumKit(name=chosen, root=library_root, pads=pads)
 
 
-def list_drumsets(library_root: Path) -> list[str]:
+def list_drumsets(library_root: Path, kit_labels: dict[str, str] | None = None) -> list[str]:
     drumsets, _ = _parse_uberconf(library_root / "uberconf")
+    labels = kit_labels or {}
     if drumsets:
-        return list(drumsets.keys())
+        return [labels.get(name, name) for name in drumsets.keys()]
     sounds = library_root / "Sounds"
     if sounds.is_dir() and any(sounds.glob("**/*.wav")):
-        return ["Default Core Kit"]
+        return [labels.get("Default Core Kit", "Standard Kit")]
     return [library_root.name]
+
+
+def resolve_kit_name(display_name: str, kit_labels: dict[str, str]) -> str:
+    for internal, label in kit_labels.items():
+        if label == display_name:
+            return internal
+    return display_name

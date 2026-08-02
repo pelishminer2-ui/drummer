@@ -1,0 +1,5 @@
+-r requirements.txt
+# NVIDIA CUDA — RTX 50-series (sm_120) needs cu132; older GPUs can use cu124/cu126
+--extra-index-url https://download.pytorch.org/whl/cu132
+torch==2.13.0
+# Pure-torch mel/MFCC — torchaudio not required

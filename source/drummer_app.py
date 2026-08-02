@@ -12,16 +12,28 @@ from tkinter import filedialog, messagebox, ttk
 
 from kit_ui import (
     PAD_ALIASES_ENGINE,
+    PIECE_HIT_PRIORITY,
+    PIECE_TO_PADS,
     KitRegion,
     KitVisual,
     load_kit_visual,
     load_mixer,
 )
-from library_parser import list_drumsets, load_kit
-from library_scanner import DetectedLibrary, detect_all, load_catalog
+from audio_analyze import analyze_file, record_guitar
+from audio_loops import AudioLoopLibrary, AudioLoopPlayer
+from folder_kit_parser import list_folder_kits, load_folder_kit
+from gpu_backend import get_gpu_info
+from groove_catalog import load_session_grooves, scan_all_grooves
+from demo_catalog import DemoLibrary, DemoPlayer
+from groove_export import render_midi_to_wav
+from groove_matcher import find_matches
+from playback_kit import load_playback_kit, needs_playback_fallback
+from library_parser import list_drumsets, load_kit, resolve_kit_name
+from library_scanner import DetectedLibrary, add_custom_library, detect_all, libraries_root, load_manifest
 from midi_grooves import GrooveLibrary, GroovePlayer
+from selected_tracks import SelectedTrack, tracks_for_library
 from sampler_engine import SamplerEngine
-from sfz_parser import list_drum_replacer_kits, load_drum_replacer_kit
+from sfz_parser import list_sfz_kits, load_sfz_kit
 
 try:
     from PIL import Image, ImageTk
@@ -30,7 +42,7 @@ except ImportError:
     ImageTk = None
 
 APP_NAME = "Drummer Studio"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.6.1"
 PUBLISHER = "Drummer Studio Contributors"
 LICENSE_NAME = "MIT"
 LICENSE_URL = "https://opensource.org/licenses/MIT"
@@ -60,7 +72,7 @@ KEY_BINDINGS = {
 
 
 class KitCanvas(tk.Canvas):
-    """Clickable drum kit photo (EZdrummer-style main view)."""
+    """Clickable drum kit photo (main studio view)."""
 
     def __init__(self, master, on_hit, **kwargs) -> None:
         super().__init__(master, highlightthickness=0, **kwargs)
@@ -124,15 +136,21 @@ class KitCanvas(tk.Canvas):
     def _click(self, event) -> None:
         if not self.visual:
             return
-        lx = (event.x - self._offset_x) / self._scale
-        ly = (event.y - self._offset_y) / self._scale
-        for region in self.visual.regions:
-            if region.x <= lx <= region.x + region.width and region.y <= ly <= region.y + region.height:
-                self._flash(region)
-                for pad in region.pads:
-                    if self.on_hit(pad, 105):
-                        return
-                return
+        lx = (event.x - self._offset_x) / max(self._scale, 0.001)
+        ly = (event.y - self._offset_y) / max(self._scale, 0.001)
+        hits = [
+            region
+            for region in self.visual.regions
+            if region.x <= lx <= region.x + region.width and region.y <= ly <= region.y + region.height
+        ]
+        if not hits:
+            return
+        region = min(
+            hits,
+            key=lambda r: PIECE_HIT_PRIORITY.index(r.piece) if r.piece in PIECE_HIT_PRIORITY else 99,
+        )
+        self._flash(region)
+        self.on_hit(region.piece, 105)
 
     def _flash(self, region: KitRegion) -> None:
         if self._flash_id:
@@ -155,7 +173,17 @@ class DrummerStudioApp(tk.Tk):
 
         self.engine = SamplerEngine()
         self.groove_library = GrooveLibrary()
-        self.groove_player = GroovePlayer(self.engine.trigger_note)
+        self.audio_loop_library = AudioLoopLibrary()
+        self.groove_player = GroovePlayer()
+        self.audio_loop_player = AudioLoopPlayer()
+        self.demo_library = DemoLibrary()
+        self.demo_player = DemoPlayer()
+        self._demo_items: list[tuple[str, Path]] = []
+        self._groove_items: list[tuple[str, Path]] = []
+        self._pinned_tracks: list[SelectedTrack] = []
+        self._match_mode = False
+        self._last_analysis = None
+        self._record_seconds = tk.IntVar(value=8)
         self.detected: list[DetectedLibrary] = detect_all()
         self.current_detected = self.detected[0] if self.detected else None
         self.current_lib = self.detected[0].path if self.detected else None
@@ -164,6 +192,7 @@ class DrummerStudioApp(tk.Tk):
         self.mixer_presets: dict = {}
         self.fader_vars: dict[str, tk.DoubleVar] = {}
         self._piece_click_index: dict[str, int] = {}
+        self._playback_kit_label = ""
 
         self._build_styles()
         self._build_layout()
@@ -206,12 +235,13 @@ class DrummerStudioApp(tk.Tk):
         ttk.Label(toolbar, text="Mix Preset", style="Toolbar.TLabel").pack(side="left")
         self.preset_var = tk.StringVar(value="Default")
         self.preset_combo = ttk.Combobox(toolbar, textvariable=self.preset_var, width=12, state="readonly")
-        self.preset_combo.pack(side="left", padx=(6, 12))
+        self.preset_combo.pack(side="left", padx=(6, 4))
         self.preset_combo.bind("<<ComboboxSelected>>", lambda _e: self.apply_mix_preset())
+        ttk.Button(toolbar, text="Apply Mix", command=self.apply_mix_preset).pack(side="left", padx=(0, 12))
 
         ttk.Button(toolbar, text="Rescan Libraries", command=self.rescan).pack(side="right", padx=4)
         ttk.Button(toolbar, text="About", command=self._show_about).pack(side="right", padx=4)
-        ttk.Button(toolbar, text="Sources", command=self._show_sources_dialog).pack(side="right")
+        ttk.Button(toolbar, text="Libraries", command=self._show_libraries_dialog).pack(side="right")
 
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(toolbar, textvariable=self.status_var, style="Toolbar.TLabel").pack(side="right", padx=(0, 16))
@@ -225,7 +255,7 @@ class DrummerStudioApp(tk.Tk):
         main.add(grooves_panel, weight=2)
 
         ttk.Label(kit_panel, text="DRUM KIT", style="Toolbar.TLabel", font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=8, pady=(6, 0))
-        self.kit_canvas = KitCanvas(kit_panel, on_hit=self.hit_pad, bg=THEME["panel2"], bd=0)
+        self.kit_canvas = KitCanvas(kit_panel, on_hit=self.hit_piece, bg=THEME["panel2"], bd=0)
         self.kit_canvas.pack(fill="both", expand=True, padx=6, pady=6)
 
         hint = ttk.Label(kit_panel, text="Click drums on the kit  •  Space kick  F snare  G/H hats  1/2/3 toms  J ride", style="Toolbar.TLabel")
@@ -235,6 +265,37 @@ class DrummerStudioApp(tk.Tk):
         self._build_mixer()
 
     def _build_groove_panel(self, parent) -> None:
+        match_frame = ttk.LabelFrame(
+            parent, text="Match — guitar to drums (GPU analysis: BPM + rhythm + key + AI feel)", padding=(6, 4)
+        )
+        match_frame.pack(fill="x", padx=4, pady=(6, 4))
+
+        match_row = ttk.Frame(match_frame)
+        match_row.pack(fill="x")
+        ttk.Button(match_row, text="Record Guitar", command=self._record_guitar).pack(side="left", padx=(0, 4))
+        ttk.Button(match_row, text="Import Guitar WAV", command=self._import_guitar).pack(side="left", padx=(0, 4))
+        ttk.Label(match_row, text="sec").pack(side="left")
+        ttk.Spinbox(match_row, from_=4, to=30, width=4, textvariable=self._record_seconds).pack(side="left", padx=(0, 8))
+        ttk.Button(match_row, text="Find Matches", command=self._find_groove_matches).pack(side="left", padx=(0, 4))
+        ttk.Button(match_row, text="Show All", command=self._clear_match_mode).pack(side="left")
+
+        self.match_status = tk.StringVar(value=self._match_idle_status())
+        ttk.Label(match_frame, textvariable=self.match_status, foreground=THEME["muted"], wraplength=420).pack(anchor="w", pady=(4, 0))
+
+        browser = ttk.Notebook(parent)
+        browser.pack(fill="both", expand=True, padx=2, pady=(4, 0))
+        grooves_tab = ttk.Frame(browser)
+        demos_tab = ttk.Frame(browser)
+        selected_tab = ttk.Frame(browser)
+        browser.add(grooves_tab, text="Grooves")
+        browser.add(demos_tab, text="Ass Kickers")
+        browser.add(selected_tab, text="Selected Tracks")
+        self._build_grooves_tab(grooves_tab)
+        self._build_demo_panel(demos_tab)
+        self._build_selected_tracks_tab(selected_tab)
+        self.browser_notebook = browser
+
+    def _build_grooves_tab(self, parent) -> None:
         ttk.Label(parent, text="GROOVE BROWSER", font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=4, pady=(6, 4))
         top = ttk.Frame(parent)
         top.pack(fill="x", padx=4, pady=(0, 4))
@@ -242,20 +303,29 @@ class DrummerStudioApp(tk.Tk):
         self.groove_search.trace_add("write", lambda *_: self.refresh_groove_list())
         ttk.Entry(top, textvariable=self.groove_search).pack(side="left", fill="x", expand=True)
         ttk.Button(top, text="Play", command=self.play_selected_groove).pack(side="right", padx=(4, 0))
-        ttk.Button(top, text="Stop", command=self.groove_player.stop).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Stop", command=self._stop_groove).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Add to Selected", command=self._pin_from_grooves).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Export WAV", command=self._export_groove_wav).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Open File", command=self._open_groove_file).pack(side="right", padx=(4, 0))
 
         body = ttk.Frame(parent)
         body.pack(fill="both", expand=True, padx=4, pady=4)
         body.columnconfigure(0, weight=1)
         body.rowconfigure(0, weight=1)
 
-        self.groove_tree = ttk.Treeview(body, columns=("genre", "bpm", "name"), show="headings", selectmode="browse")
+        self.groove_tree = ttk.Treeview(
+            body, columns=("genre", "bpm", "score", "rhythm", "name"), show="headings", selectmode="browse"
+        )
         self.groove_tree.heading("genre", text="Genre")
         self.groove_tree.heading("bpm", text="BPM")
+        self.groove_tree.heading("score", text="Match")
+        self.groove_tree.heading("rhythm", text="Feel")
         self.groove_tree.heading("name", text="Groove")
-        self.groove_tree.column("genre", width=100)
-        self.groove_tree.column("bpm", width=70)
-        self.groove_tree.column("name", width=220)
+        self.groove_tree.column("genre", width=80)
+        self.groove_tree.column("bpm", width=55)
+        self.groove_tree.column("score", width=45)
+        self.groove_tree.column("rhythm", width=45)
+        self.groove_tree.column("name", width=160)
         self.groove_tree.grid(row=0, column=0, sticky="nsew")
         self.groove_tree.bind("<Double-1>", lambda _e: self.play_selected_groove())
 
@@ -265,6 +335,105 @@ class DrummerStudioApp(tk.Tk):
 
         self.groove_status = tk.StringVar(value="No grooves loaded")
         ttk.Label(parent, textvariable=self.groove_status, foreground=THEME["muted"]).pack(anchor="w", padx=6, pady=4)
+
+    def _build_demo_panel(self, parent) -> None:
+        ttk.Label(parent, text="ASS KICKERS", font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=4, pady=(6, 4))
+        top = ttk.Frame(parent)
+        top.pack(fill="x", padx=4, pady=(0, 4))
+        self.demo_section_var = tk.StringVar(value="All")
+        self.demo_section_combo = ttk.Combobox(top, textvariable=self.demo_section_var, width=28, state="readonly")
+        self.demo_section_combo.pack(side="left", padx=(0, 6))
+        self.demo_section_combo.bind("<<ComboboxSelected>>", lambda _e: self.refresh_demo_list())
+        ttk.Label(top, text="Genre").pack(side="left", padx=(0, 4))
+        self.demo_genre_var = tk.StringVar(value="All")
+        self.demo_genre_combo = ttk.Combobox(top, textvariable=self.demo_genre_var, width=12, state="readonly")
+        self.demo_genre_combo.pack(side="left", padx=(0, 6))
+        self.demo_genre_combo.bind("<<ComboboxSelected>>", lambda _e: self.refresh_demo_list())
+        self.demo_search = tk.StringVar()
+        self.demo_search.trace_add("write", lambda *_: self.refresh_demo_list())
+        ttk.Entry(top, textvariable=self.demo_search).pack(side="left", fill="x", expand=True)
+        ttk.Button(top, text="Play", command=self.play_selected_demo).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Stop", command=self._stop_all_playback).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Add to Selected", command=self._pin_from_demos).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Export WAV", command=self._export_demo).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Open File", command=self._open_demo_file).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Refresh", command=self._import_ssd_demos).pack(side="right", padx=(4, 0))
+
+        body = ttk.Frame(parent)
+        body.pack(fill="both", expand=True, padx=4, pady=4)
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(0, weight=1)
+
+        self.demo_tree = ttk.Treeview(
+            body, columns=("genre", "section", "subtitle", "title"), show="headings", selectmode="browse"
+        )
+        self.demo_tree.heading("genre", text="Genre")
+        self.demo_tree.heading("section", text="Section")
+        self.demo_tree.heading("subtitle", text="Description")
+        self.demo_tree.heading("title", text="Track")
+        self.demo_tree.column("genre", width=70)
+        self.demo_tree.column("section", width=120)
+        self.demo_tree.column("subtitle", width=160)
+        self.demo_tree.column("title", width=130)
+        self.demo_tree.grid(row=0, column=0, sticky="nsew")
+        self.demo_tree.bind("<Double-1>", lambda _e: self.play_selected_demo())
+
+        scroll = ttk.Scrollbar(body, orient="vertical", command=self.demo_tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.demo_tree.configure(yscrollcommand=scroll.set)
+
+        self.demo_status = tk.StringVar(value="Run Import-SSD-Demos.ps1 to fetch Ass Kickers")
+        ttk.Label(parent, textvariable=self.demo_status, foreground=THEME["muted"], wraplength=420).pack(
+            anchor="w", padx=6, pady=4
+        )
+
+    def _build_selected_tracks_tab(self, parent) -> None:
+        ttk.Label(parent, text="SELECTED TRACKS", font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=4, pady=(6, 2))
+        self.selected_context = tk.StringVar(value="Choose a library and kit above")
+        ttk.Label(parent, textvariable=self.selected_context, foreground=THEME["muted"], wraplength=420).pack(
+            anchor="w", padx=6, pady=(0, 4)
+        )
+
+        top = ttk.Frame(parent)
+        top.pack(fill="x", padx=4, pady=(0, 4))
+        self.selected_search = tk.StringVar()
+        self.selected_search.trace_add("write", lambda *_: self.refresh_selected_tracks())
+        ttk.Entry(top, textvariable=self.selected_search).pack(side="left", fill="x", expand=True)
+        ttk.Button(top, text="Play", command=self.play_selected_track).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Stop", command=self._stop_all_playback).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Remove", command=self._remove_pinned_track).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Export WAV", command=self._export_selected_track).pack(side="right", padx=(4, 0))
+        ttk.Button(top, text="Open File", command=self._open_selected_track).pack(side="right", padx=(4, 0))
+
+        body = ttk.Frame(parent)
+        body.pack(fill="both", expand=True, padx=4, pady=4)
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(0, weight=1)
+
+        self.selected_tree = ttk.Treeview(
+            body, columns=("kind", "genre", "bpm", "name", "source"), show="headings", selectmode="browse"
+        )
+        self.selected_tree.heading("kind", text="Type")
+        self.selected_tree.heading("genre", text="Genre")
+        self.selected_tree.heading("bpm", text="BPM")
+        self.selected_tree.heading("name", text="Track")
+        self.selected_tree.heading("source", text="Source")
+        self.selected_tree.column("kind", width=48)
+        self.selected_tree.column("genre", width=72)
+        self.selected_tree.column("bpm", width=52)
+        self.selected_tree.column("name", width=140)
+        self.selected_tree.column("source", width=120)
+        self.selected_tree.grid(row=0, column=0, sticky="nsew")
+        self.selected_tree.bind("<Double-1>", lambda _e: self.play_selected_track())
+
+        scroll = ttk.Scrollbar(body, orient="vertical", command=self.selected_tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.selected_tree.configure(yscrollcommand=scroll.set)
+
+        self.selected_status = tk.StringVar(value="Updates when you change Library or Kit")
+        ttk.Label(parent, textvariable=self.selected_status, foreground=THEME["muted"], wraplength=420).pack(
+            anchor="w", padx=6, pady=4
+        )
 
     def _build_mixer(self) -> None:
         mixer_frame = tk.Frame(self, bg=THEME["mixer_bg"], height=130)
@@ -326,16 +495,28 @@ class DrummerStudioApp(tk.Tk):
 
     def bootstrap(self) -> None:
         self.rescan()
+        self._load_demos()
 
     def rescan(self) -> None:
         self.detected = detect_all()
-        labels = [f"{d.name}  ({d.wav_count:,} samples)" for d in self.detected]
+        labels = []
+        for d in self.detected:
+            if d.playable_wav_count:
+                labels.append(f"{d.name}  ({d.playable_wav_count:,} playable samples)")
+            elif d.library_type == "pdk" and d.playable_wav_count == 0:
+                labels.append(f"{d.name}  (PDK — select to extract samples)")
+            elif d.library_type == "vst":
+                labels.append(f"{d.name}  (VST3 plugin — use in your DAW)")
+            elif d.sample_format == "ttpw":
+                labels.append(f"{d.name}  (Toontrack format — kit won't play here)")
+            else:
+                labels.append(f"{d.name}  ({d.wav_count:,} samples)")
         self.library_combo["values"] = labels
         if labels:
             self.library_combo.current(0)
             self.on_library_change()
         else:
-            self.status_var.set("No libraries found")
+            self.status_var.set(f"No libraries in {libraries_root()} — run Import-Libraries.ps1")
 
     def on_library_change(self) -> None:
         idx = self.library_combo.current()
@@ -346,10 +527,26 @@ class DrummerStudioApp(tk.Tk):
         self.current_lib = detected.path
         self.midi_root = detected.midi_root
 
-        if detected.library_type == "cakewalk_sfz":
-            kits = list_drum_replacer_kits(detected.path)
+        if detected.library_type == "sfz":
+            kits = list_sfz_kits(detected.path, detected.sfz_kits)
+        elif detected.library_type == "folder":
+            kits = list_folder_kits(detected.path)
+        elif detected.library_type == "pdk":
+            from pdk_parser import ensure_pdk_extracted, list_pdk_kits
+
+            manifest_entry = next(
+                (e for e in load_manifest().get("libraries", []) if e.get("id") == detected.library_id),
+                {},
+            )
+            try:
+                self.status_var.set(f"Extracting {detected.name} samples from .pdk ...")
+                self.update_idletasks()
+                ensure_pdk_extracted(detected.path, manifest_entry.get("pdk_file"))
+            except Exception as exc:
+                messagebox.showerror(APP_NAME, f"Could not extract MT Wild Drums samples:\n{exc}")
+            kits = list_pdk_kits(detected.path)
         else:
-            kits = list_drumsets(detected.path)
+            kits = list_drumsets(detected.path, detected.kit_labels)
         if not kits:
             kits = [detected.name]
         self.kit_combo["values"] = kits
@@ -362,41 +559,379 @@ class DrummerStudioApp(tk.Tk):
         if presets:
             self.preset_var.set(list(presets.keys())[0])
         self._rebuild_mixer_channels()
-        self.apply_mix_preset()
         self.load_selected_kit()
+        self.apply_mix_preset()
 
-        if self.midi_root:
-            count = self.groove_library.scan(self.midi_root)
-            self.groove_status.set(f"{count:,} grooves")
-            self.refresh_groove_list()
+        self.groove_library.grooves.clear()
+        self.audio_loop_library.loops.clear()
+        self._groove_items.clear()
+
+        self.groove_status.set("Loading grooves…")
+        self.update_idletasks()
+        self.groove_library.grooves = load_session_grooves(detected)
+        lib_root = libraries_root()
+
+        loops_dir = detected.path / "Loops"
+        if loops_dir.is_dir():
+            self.audio_loop_library.scan(loops_dir)
+        for entry in load_manifest().get("libraries", []):
+            if entry.get("id") == detected.library_id:
+                lf = entry.get("loops_folder")
+                if lf:
+                    lp = lib_root / lf
+                    if lp.is_dir() and lp != loops_dir:
+                        self.audio_loop_library.scan(lp)
+
+        midi_count = len(self.groove_library.grooves)
+        loop_count = len(self.audio_loop_library.loops)
+        if detected.midi_count == 0 and midi_count:
+            groove_note = f"{midi_count:,} shared MIDI grooves"
+        elif detected.midi_count:
+            groove_note = f"{midi_count:,} MIDI"
+        else:
+            groove_note = "No MIDI grooves — run Import-Libraries.ps1"
+        self.groove_status.set(f"{groove_note}  •  {loop_count:,} audio loops")
+        self.refresh_groove_list()
+        self.refresh_selected_tracks()
+
+    def _ensure_playback_ready(self) -> bool:
+        if self.engine.kit and self.engine.sample_count() > 0:
+            return True
+        try:
+            kit, lib_name, kit_name = load_playback_kit(self.detected)
+            self.engine.load_kit(kit)
+            self._playback_kit_label = f"{kit_name} ({lib_name})"
+            return True
+        except RuntimeError as exc:
+            messagebox.showerror(APP_NAME, str(exc))
+            return False
 
     def load_selected_kit(self) -> None:
         if not self.current_lib:
             return
         kit_name = self.kit_var.get()
+        labels = self.current_detected.kit_labels if self.current_detected else {}
+        visual = load_kit_visual(self.current_lib)
+        self.kit_canvas.load_visual(visual)
+
+        if self.current_detected and self.current_detected.library_type == "pdk":
+            from pdk_parser import load_pdk_kit
+
+            manifest_entry = next(
+                (e for e in load_manifest().get("libraries", []) if e.get("id") == self.current_detected.library_id),
+                {},
+            )
+            kit = load_pdk_kit(self.current_lib, kit_name, manifest_entry.get("pdk_file"))
+            self.engine.load_kit(kit)
+            self._playback_kit_label = kit_name
+            self.status_var.set(
+                f"{kit_name}  •  {self.engine.pad_count()} pads  •  {self.engine.sample_count():,} MT Power Drum Kit samples"
+            )
+            self.refresh_selected_tracks()
+            return
+
+        if needs_playback_fallback(self.current_detected):
+            try:
+                kit, lib_name, playback_name = load_playback_kit(self.detected)
+                self.engine.load_kit(kit)
+                self._playback_kit_label = f"{playback_name} ({lib_name})"
+                lib_label = self.current_detected.name if self.current_detected else "Library"
+                self.status_var.set(
+                    f"{lib_label}  •  MIDI grooves  •  sounds: {self._playback_kit_label}"
+                )
+            except Exception as exc:
+                messagebox.showerror(APP_NAME, f"Could not load playback kit:\n{exc}")
+            self.refresh_selected_tracks()
+            return
+
         try:
-            if self.current_detected and self.current_detected.library_type == "cakewalk_sfz":
-                kit = load_drum_replacer_kit(self.current_lib, kit_name)
+            if self.current_detected and self.current_detected.library_type == "sfz":
+                kit = load_sfz_kit(self.current_lib, kit_name, self.current_detected.sfz_kits)
+            elif self.current_detected and self.current_detected.library_type == "folder":
+                kit = load_folder_kit(self.current_lib, kit_name)
             else:
-                kits = list_drumsets(self.current_lib)
-                kit = load_kit(self.current_lib, kit_name if kit_name in kits else None)
+                internal_name = resolve_kit_name(kit_name, labels)
+                kit = load_kit(self.current_lib, internal_name)
 
             self.engine.load_kit(kit)
-            visual = load_kit_visual(self.current_lib)
-            self.kit_canvas.load_visual(visual)
-            self.status_var.set(f"{kit.name}  •  {self.engine.pad_count()} pads  •  {self.engine.sample_count():,} samples")
+            if self.engine.sample_count() == 0:
+                kit, lib_name, playback_name = load_playback_kit(self.detected)
+                self.engine.load_kit(kit)
+                self._playback_kit_label = f"{playback_name} ({lib_name})"
+                self.status_var.set(
+                    f"{kit_name}  •  MIDI via {self._playback_kit_label}"
+                )
+            else:
+                self._playback_kit_label = kit_name
+                self.status_var.set(
+                    f"{kit_name}  •  {self.engine.pad_count()} pads  •  {self.engine.sample_count():,} samples loaded"
+                )
         except Exception as exc:
-            messagebox.showerror(APP_NAME, f"Failed to load kit:\n{exc}")
+            if self._ensure_playback_ready():
+                self.status_var.set(f"MIDI playback  •  sounds: {self._playback_kit_label}")
+            else:
+                messagebox.showerror(APP_NAME, f"Failed to load kit:\n{exc}")
+
+        self.refresh_selected_tracks()
+
+    def refresh_selected_tracks(self) -> None:
+        if not hasattr(self, "selected_tree"):
+            return
+        lib = self.current_detected
+        kit = self.kit_var.get() if hasattr(self, "kit_var") else ""
+        if lib:
+            self.selected_context.set(f"{lib.name}  •  {kit}")
+        else:
+            self.selected_context.set("Choose a library and kit above")
+
+        library_list = tracks_for_library(lib, kit)
+        pinned_keys = {t.iid for t in self._pinned_tracks}
+        q = self.selected_search.get().strip().lower() if hasattr(self, "selected_search") else ""
+
+        combined: list[SelectedTrack] = list(self._pinned_tracks)
+        for track in library_list:
+            if track.iid not in pinned_keys:
+                combined.append(track)
+
+        if q:
+            combined = [
+                t
+                for t in combined
+                if q in t.name.lower()
+                or q in t.genre.lower()
+                or q in t.bpm.lower()
+                or q in t.source.lower()
+                or q in t.kind.lower()
+            ]
+
+        self.selected_tree.delete(*self.selected_tree.get_children())
+        for track in combined:
+            kind_label = {"midi": "MIDI", "wav": "WAV", "demo": "Demo"}.get(track.kind, track.kind.upper())
+            self.selected_tree.insert(
+                "",
+                "end",
+                iid=track.iid,
+                values=(kind_label, track.genre, track.bpm, track.name, track.source),
+            )
+
+        pinned = len(self._pinned_tracks)
+        lib_count = len(library_list)
+        self.selected_status.set(f"{lib_count:,} for this library  •  {pinned} pinned  •  {len(combined):,} shown")
+
+    def _track_from_tree_iid(self, iid: str) -> SelectedTrack | None:
+        if ":" not in iid:
+            return None
+        kind, _, raw = iid.partition(":")
+        path = Path(raw)
+        for track in self._pinned_tracks:
+            if track.iid == iid:
+                return track
+        lib = self.current_detected
+        kit = self.kit_var.get()
+        for track in tracks_for_library(lib, kit):
+            if track.iid == iid:
+                return track
+        if path.exists():
+            return SelectedTrack(path=path, name=path.stem, kind=kind, genre="", bpm="", source="")
+        return None
+
+    def _pin_track(self, track: SelectedTrack) -> None:
+        if any(t.iid == track.iid for t in self._pinned_tracks):
+            self.selected_status.set(f"Already in Selected Tracks: {track.name}")
+            return
+        pinned = SelectedTrack(
+            path=track.path,
+            name=track.name,
+            kind=track.kind,
+            genre=track.genre,
+            bpm=track.bpm,
+            source="Pinned",
+        )
+        self._pinned_tracks.insert(0, pinned)
+        self.refresh_selected_tracks()
+        if hasattr(self, "browser_notebook"):
+            self.browser_notebook.select(2)
+        self.selected_status.set(f"Added: {track.name}")
+
+    def _pin_from_grooves(self) -> None:
+        sel = self.groove_tree.selection()
+        if not sel:
+            messagebox.showinfo(APP_NAME, "Select a groove in the Grooves list first.")
+            return
+        iid = sel[0]
+        if iid.startswith("wav:"):
+            path = Path(iid[4:])
+            loop = next((l for l in self.audio_loop_library.loops if l.path.resolve() == path.resolve()), None)
+            if loop:
+                self._pin_track(
+                    SelectedTrack(path=loop.path, name=loop.name, kind="wav", genre=loop.genre, bpm=loop.bpm, source="Pinned")
+                )
+            else:
+                self._pin_track(SelectedTrack(path=path, name=path.stem, kind="wav", genre="WAV", bpm="", source="Pinned"))
+        elif iid.startswith("mid:"):
+            path = Path(iid[4:])
+            groove = next((g for g in self.groove_library.grooves if g.path.resolve() == path.resolve()), None)
+            if groove:
+                self._pin_track(
+                    SelectedTrack(
+                        path=groove.path,
+                        name=groove.name,
+                        kind="midi",
+                        genre=groove.genre or "MIDI",
+                        bpm=groove.bpm,
+                        source="Pinned",
+                    )
+                )
+            else:
+                self._pin_track(SelectedTrack(path=path, name=path.stem, kind="midi", genre="MIDI", bpm="", source="Pinned"))
+        elif ":" in iid:
+            kind, _, raw = iid.partition(":")
+            path = Path(raw)
+            self._pin_track(SelectedTrack(path=path, name=path.stem, kind=kind, genre="", bpm="", source="Pinned"))
+
+    def _pin_from_demos(self) -> None:
+        sel = self.demo_tree.selection()
+        if not sel:
+            messagebox.showinfo(APP_NAME, "Select a track in Ass Kickers first.")
+            return
+        iid = sel[0]
+        if not iid.startswith("demo:"):
+            return
+        path = Path(iid[5:])
+        track = next((t for t in self.demo_library.tracks if t.path.resolve() == path.resolve()), None)
+        if track:
+            self._pin_track(
+                SelectedTrack(
+                    path=track.path,
+                    name=track.title,
+                    kind="demo",
+                    genre=track.genre,
+                    bpm="",
+                    source="Pinned",
+                )
+            )
+        else:
+            self._pin_track(SelectedTrack(path=path, name=path.stem, kind="demo", genre="Demo", bpm="", source="Pinned"))
+
+    def _remove_pinned_track(self) -> None:
+        sel = self.selected_tree.selection()
+        if not sel:
+            return
+        iid = sel[0]
+        before = len(self._pinned_tracks)
+        self._pinned_tracks = [t for t in self._pinned_tracks if t.iid != iid]
+        if len(self._pinned_tracks) < before:
+            self.refresh_selected_tracks()
+            self.selected_status.set("Removed pinned track")
+        else:
+            self.selected_status.set("Only pinned tracks can be removed — library tracks follow the dropdown")
+
+    def play_selected_track(self) -> None:
+        sel = self.selected_tree.selection()
+        if not sel:
+            return
+        track = self._track_from_tree_iid(sel[0])
+        if not track:
+            return
+        self._stop_all_playback()
+        if track.kind == "demo":
+            self._play_demo_track(track.path, self.selected_status)
+        elif track.kind == "wav":
+            self._play_audio_loop(track.path, self.selected_status)
+        elif track.kind == "midi":
+            self._play_midi_groove(track.path, self.selected_status)
+
+    def _open_selected_track(self) -> None:
+        sel = self.selected_tree.selection()
+        if not sel:
+            return
+        track = self._track_from_tree_iid(sel[0])
+        if not track or not track.path.exists():
+            messagebox.showerror(APP_NAME, "File not found.")
+            return
+        import subprocess
+
+        subprocess.Popen(["explorer", "/select,", str(track.path)])
+
+    def _export_selected_track(self) -> None:
+        sel = self.selected_tree.selection()
+        if not sel:
+            messagebox.showinfo(APP_NAME, "Select a track first.")
+            return
+        track = self._track_from_tree_iid(sel[0])
+        if not track:
+            return
+        if track.kind in ("wav", "demo"):
+            dest = filedialog.asksaveasfilename(
+                title="Save WAV copy",
+                defaultextension=".wav",
+                initialfile=f"{track.path.stem}.wav",
+                filetypes=[("WAV audio", "*.wav"), ("MP3 audio", "*.mp3"), ("All files", "*.*")],
+            )
+            if not dest:
+                return
+            import shutil
+
+            shutil.copy2(track.path, dest)
+            self.selected_status.set(f"Saved: {Path(dest).name}")
+            return
+        if track.kind == "midi":
+            if not self._ensure_playback_ready():
+                return
+            default_dir = libraries_root() / "User-Exports"
+            default_dir.mkdir(parents=True, exist_ok=True)
+            dest = filedialog.asksaveasfilename(
+                title="Export groove as WAV",
+                defaultextension=".wav",
+                initialdir=str(default_dir),
+                initialfile=f"{track.path.stem}.wav",
+                filetypes=[("WAV audio", "*.wav")],
+            )
+            if not dest:
+                return
+            try:
+                render_midi_to_wav(track.path, self.engine.kit, Path(dest))
+                self.selected_status.set(f"Exported WAV: {Path(dest).name}")
+            except Exception as exc:
+                messagebox.showerror(APP_NAME, f"Export failed:\n{exc}")
 
     def apply_mix_preset(self) -> None:
         preset_name = self.preset_var.get()
         preset = self.mixer_presets.get(preset_name)
         if not preset:
             return
-        for ch_name, ch in preset.channels.items():
-            if ch_name in self.fader_vars:
-                self.fader_vars[ch_name].set(ch.volume * 100)
-                self.engine.set_channel_volume(ch_name, ch.volume)
+        for ch in self.mixer_channels:
+            vol = preset.channels.get(ch.name, ch).volume
+            if ch.name in self.fader_vars:
+                self.fader_vars[ch.name].set(vol * 100)
+            self.engine.set_channel_volume(ch.name, vol)
+        self.engine.set_room_send(preset.room_send)
+        room_pct = int(preset.room_send * 100)
+        base = self.status_var.get().split("  •  Mix:")[0]
+        self.status_var.set(f"{base}  •  Mix: {preset_name} ({room_pct}% room)")
+
+    def hit_piece(self, piece: str, velocity: int = 100) -> bool:
+        """Click a kit region — try every pad that maps to this drum/cymbal."""
+        if not self.engine.kit:
+            self.status_var.set("Load a kit first (Pack Punk or Pack SFZ)")
+            return False
+        pads = list(PIECE_TO_PADS.get(piece, []))
+        if piece not in self._piece_click_index:
+            self._piece_click_index[piece] = 0
+        # Round-robin tom / multi-sample pieces for variety
+        if piece in ("Tom", "Snare2") and len(pads) > 1:
+            idx = self._piece_click_index[piece] % len(pads)
+            pads = pads[idx:] + pads[:idx]
+            self._piece_click_index[piece] = idx + 1
+        for pad in pads:
+            if self.hit_pad(pad, velocity):
+                return True
+        for pad in pads:
+            for alias in PAD_ALIASES_ENGINE.get(pad, []):
+                if self.hit_pad(alias, velocity):
+                    return True
+        self.status_var.set(f"No sample for {piece} in this kit")
+        return False
 
     def hit_pad(self, pad_name: str, velocity: int = 100) -> bool:
         targets = [pad_name] + PAD_ALIASES_ENGINE.get(pad_name, [])
@@ -405,18 +940,350 @@ class DrummerStudioApp(tk.Tk):
                 return True
         return False
 
-    def refresh_groove_list(self) -> None:
+    def _match_idle_status(self) -> str:
+        gpu = get_gpu_info()
+        accel = gpu.label if gpu.available else "CPU (run source\\install-gpu.ps1 for NVIDIA GPU)"
+        return f"Record or import guitar — AI analysis on {accel}"
+
+    def _clear_match_mode(self) -> None:
+        self._match_mode = False
+        self._last_analysis = None
+        self.match_status.set(self._match_idle_status())
+        self.refresh_groove_list()
+
+    def _import_guitar(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Import guitar recording",
+            filetypes=[("WAV audio", "*.wav"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        self._analyze_guitar(Path(path))
+
+    def _record_guitar(self) -> None:
+        out = libraries_root() / "User-Recordings" / "guitar_take.wav"
+        secs = max(4, min(30, int(self._record_seconds.get())))
+        self.match_status.set(f"Recording {secs}s from microphone...")
+        self.update_idletasks()
+        try:
+            record_guitar(out, duration_sec=float(secs))
+            self._analyze_guitar(out)
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Recording failed:\n{exc}\n\nTry Import Guitar WAV instead.")
+
+    def _analyze_guitar(self, path: Path) -> None:
+        try:
+            analysis = analyze_file(path)
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Could not analyze audio:\n{exc}")
+            return
+        self._last_analysis = analysis
+        gpu_note = analysis.gpu_backend if analysis.gpu_backend != "CPU" else get_gpu_info().label
+        self.match_status.set(
+            f"~{analysis.bpm} BPM  •  Key: {analysis.key_root} {analysis.key_mode}  "
+            f"({analysis.key_confidence:.0%})  •  {analysis.duration_sec:.1f}s  •  {gpu_note}  —  Find Matches"
+        )
+        self._find_groove_matches()
+
+    def _all_grooves_for_match(self) -> tuple[list, list]:
+        from groove_catalog import load_session_grooves, scan_all_grooves
+
+        loop_lib = AudioLoopLibrary()
+        lib_root = libraries_root()
+        seen_loops: set[Path] = set()
+        for lib in self.detected:
+            loops_dir = lib.path / "Loops"
+            if loops_dir.is_dir():
+                loop_lib.scan(loops_dir)
+            for entry in load_manifest().get("libraries", []):
+                if entry.get("id") == lib.library_id:
+                    lf = entry.get("loops_folder")
+                    if lf:
+                        lp = lib_root / lf
+                        if lp.is_dir() and lp.resolve() not in seen_loops:
+                            seen_loops.add(lp.resolve())
+                            extra = AudioLoopLibrary()
+                            extra.scan(lp)
+                            loop_lib.loops.extend(extra.loops)
+        return scan_all_grooves(), loop_lib.loops + self.demo_library.to_audio_loops()
+
+    def _find_groove_matches(self) -> None:
+        if not self._last_analysis:
+            messagebox.showinfo(APP_NAME, "Record or import a guitar WAV first.")
+            return
+        midi_grooves, audio_loops = self._all_grooves_for_match()
+        if not midi_grooves and not audio_loops:
+            messagebox.showinfo(APP_NAME, "No grooves in Libraries folder. Run Import-Libraries.ps1 first.")
+            return
+        matches = find_matches(self._last_analysis, midi_grooves, audio_loops, limit=60)
+        self._match_mode = True
         self.groove_tree.delete(*self.groove_tree.get_children())
-        for groove in self.groove_library.filter(self.groove_search.get()):
-            self.groove_tree.insert("", "end", iid=str(groove.path), values=(groove.genre, groove.bpm, groove.name))
+        for m in matches:
+            iid = f"{m.kind}:{m.path}"
+            self.groove_tree.insert(
+                "",
+                "end",
+                iid=iid,
+                values=(m.genre[:20], m.bpm_label, f"{m.score:.0f}", f"{m.rhythm_score:.0%}", m.name),
+            )
+        if matches:
+            top = matches[0]
+            self.groove_status.set(
+                f"Best: {top.name}  —  match {top.score:.0f}%  rhythm {top.rhythm_score:.0%}  key {top.key_score:.0%}"
+            )
+        else:
+            self.groove_status.set("No matches found")
+
+    def _stop_groove(self) -> None:
+        self.groove_player.stop()
+        self.audio_loop_player.stop()
+
+    def _play_audio_loop(self, path: Path, status_var: tk.StringVar | None = None) -> None:
+        label = status_var or self.groove_status
+        label.set(f"Loading: {path.stem}…")
+        self.update_idletasks()
+
+        def on_ready() -> None:
+            self.after(0, lambda: label.set(f"Playing: {path.stem}  •  ×3"))
+
+        def on_error(exc: Exception) -> None:
+            self.after(0, lambda: messagebox.showerror(APP_NAME, f"Could not play loop:\n{exc}"))
+
+        self.audio_loop_player.play_file(path, on_ready=on_ready, on_error=on_error)
+
+    def _play_demo_track(self, path: Path, status_var: tk.StringVar | None = None) -> None:
+        label = status_var or self.demo_status
+        label.set(f"Loading: {path.stem}…")
+        self.update_idletasks()
+
+        def on_ready() -> None:
+            self.after(0, lambda: label.set(f"Playing: {path.stem}  •  ×3"))
+
+        def on_error(exc: Exception) -> None:
+            self.after(0, lambda: messagebox.showerror(APP_NAME, f"Could not play track:\n{exc}"))
+
+        self.demo_player.play_file(path, on_ready=on_ready, on_error=on_error)
+
+    def _play_midi_groove(self, path: Path, status_var: tk.StringVar | None = None) -> None:
+        if not self._ensure_playback_ready():
+            return
+        label = status_var or self.groove_status
+        label.set(f"Rendering: {path.stem}…")
+        self.update_idletasks()
+
+        def on_ready() -> None:
+            self.after(0, lambda: label.set(f"Playing: {path.stem}  •  {self._playback_kit_label}  •  ×3"))
+
+        def on_error(exc: Exception) -> None:
+            def show() -> None:
+                label.set(f"Playback failed: {path.stem}")
+                messagebox.showerror(APP_NAME, f"Could not play groove:\n{exc}")
+
+            self.after(0, show)
+
+        self.groove_player.play_file(
+            path,
+            self.engine.kit,
+            channel_volume=dict(self.engine.channel_volume),
+            master_volume=self.engine.master_volume,
+            on_ready=on_ready,
+            on_error=on_error,
+        )
+
+    def _stop_all_playback(self) -> None:
+        self._stop_groove()
+        self.demo_player.stop()
+
+    def _load_demos(self) -> None:
+        root = libraries_root() / "Demo-Tracks"
+        count = self.demo_library.load(root)
+        sections = ["All"] + [s["heading"] for s in self.demo_library.sections]
+        self.demo_section_combo["values"] = sections
+        genres = ["All"] + self.demo_library.genres()
+        self.demo_genre_combo["values"] = genres
+        if sections:
+            self.demo_section_var.set("All")
+        if genres:
+            self.demo_genre_var.set("All")
+        self.refresh_demo_list()
+        if count:
+            self.demo_status.set(f"{count} Ass Kickers loaded from {root.name}")
+        else:
+            self.demo_status.set("No Ass Kickers — click Refresh or run Import-SSD-Demos.ps1")
+
+    def _import_ssd_demos(self) -> None:
+        from ssd_demo_import import build_default_catalog, download_catalog
+
+        dest = libraries_root() / "Demo-Tracks"
+        self.demo_status.set("Fetching Ass Kickers from stevenslatedrums.com...")
+        self.update_idletasks()
+        try:
+            catalog = build_default_catalog()
+            download_catalog(catalog, dest)
+            self._load_demos()
+            self.demo_status.set(f"Imported {len(self.demo_library.tracks)} Ass Kickers")
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Ass Kickers import failed:\n{exc}")
+
+    def refresh_demo_list(self) -> None:
+        self.demo_tree.delete(*self.demo_tree.get_children())
+        self._demo_items.clear()
+        query = self.demo_search.get()
+        section = self.demo_section_var.get()
+        genre = self.demo_genre_var.get()
+        tracks = self.demo_library.filter(query, genre)
+        if section and section != "All":
+            tracks = [t for t in tracks if t.section_heading == section]
+        for track in tracks:
+            iid = f"demo:{track.path}"
+            self._demo_items.append((iid, track.path))
+            self.demo_tree.insert(
+                "",
+                "end",
+                iid=iid,
+                values=(track.genre, track.section_heading, track.subtitle[:60], track.title),
+            )
+
+    def play_selected_demo(self) -> None:
+        sel = self.demo_tree.selection()
+        if not sel:
+            return
+        path = Path(sel[0][5:])
+        self._stop_all_playback()
+        self._play_demo_track(path)
+
+    def _open_demo_file(self) -> None:
+        sel = self.demo_tree.selection()
+        if not sel:
+            return
+        path = Path(sel[0][5:])
+        import subprocess
+
+        if path.exists():
+            subprocess.Popen(["explorer", "/select,", str(path)])
+        else:
+            messagebox.showerror(APP_NAME, f"File not found:\n{path}")
+
+    def _export_demo(self) -> None:
+        sel = self.demo_tree.selection()
+        if not sel:
+            messagebox.showinfo(APP_NAME, "Select an Ass Kicker first.")
+            return
+        path = Path(sel[0][5:])
+        default_dir = libraries_root() / "User-Exports"
+        default_dir.mkdir(parents=True, exist_ok=True)
+        dest = filedialog.asksaveasfilename(
+            title="Export Ass Kicker as WAV",
+            defaultextension=".wav",
+            initialdir=str(default_dir),
+            initialfile=f"{path.stem}.wav",
+            filetypes=[("WAV audio", "*.wav"), ("MP3 audio", "*.mp3")],
+        )
+        if not dest:
+            return
+        try:
+            if Path(dest).suffix.lower() == ".mp3":
+                import shutil
+
+                shutil.copy2(path, dest)
+            else:
+                from wav_io import load_audio_mono, write_wav_mono
+
+                samples, sr = load_audio_mono(path)
+                write_wav_mono(Path(dest), samples, sr)
+            self.demo_status.set(f"Exported: {Path(dest).name} — drag into your DAW")
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Export failed:\n{exc}")
+
+    def refresh_groove_list(self) -> None:
+        if self._match_mode:
+            return
+        self.groove_tree.delete(*self.groove_tree.get_children())
+        q = self.groove_search.get().strip().lower()
+
+        for groove in self.groove_library.filter(q):
+            iid = f"mid:{groove.path}"
+            self.groove_tree.insert("", "end", iid=iid, values=(groove.genre or "MIDI", groove.bpm, "", "", groove.name))
+
+        for loop in self.audio_loop_library.filter(q):
+            iid = f"wav:{loop.path}"
+            self.groove_tree.insert("", "end", iid=iid, values=(loop.genre, loop.bpm, "", "", loop.name))
+
+    def _open_groove_file(self) -> None:
+        sel = self.groove_tree.selection()
+        if not sel:
+            return
+        iid = sel[0]
+        if iid.startswith("wav:"):
+            path = Path(iid[4:])
+        elif iid.startswith("mid:"):
+            path = Path(iid[4:])
+        else:
+            return
+        import os
+        import subprocess
+
+        if path.exists():
+            subprocess.Popen(["explorer", "/select,", str(path)])
+        else:
+            messagebox.showerror(APP_NAME, f"File not found:\n{path}")
+
+    def _export_groove_wav(self) -> None:
+        sel = self.groove_tree.selection()
+        if not sel:
+            messagebox.showinfo(APP_NAME, "Select a groove in the list first.")
+            return
+        iid = sel[0]
+        if iid.startswith("wav:"):
+            src = Path(iid[4:])
+            dest = filedialog.asksaveasfilename(
+                title="Save WAV copy",
+                defaultextension=".wav",
+                initialfile=f"{src.stem}.wav",
+                filetypes=[("WAV audio", "*.wav")],
+            )
+            if not dest:
+                return
+            import shutil
+
+            shutil.copy2(src, dest)
+            self.groove_status.set(f"Saved: {Path(dest).name}")
+            return
+
+        if not iid.startswith("mid:"):
+            return
+        if not self.engine.kit or self.engine.sample_count() == 0:
+            if not self._ensure_playback_ready():
+                return
+
+        midi_path = Path(iid[4:])
+        default_dir = libraries_root() / "User-Exports"
+        default_dir.mkdir(parents=True, exist_ok=True)
+        dest = filedialog.asksaveasfilename(
+            title="Export groove as WAV",
+            defaultextension=".wav",
+            initialdir=str(default_dir),
+            initialfile=f"{midi_path.stem}.wav",
+            filetypes=[("WAV audio", "*.wav")],
+        )
+        if not dest:
+            return
+        try:
+            render_midi_to_wav(midi_path, self.engine.kit, Path(dest))
+            self.groove_status.set(f"Exported WAV: {Path(dest).name} — drag into your DAW")
+        except Exception as exc:
+            messagebox.showerror(APP_NAME, f"Export failed:\n{exc}")
 
     def play_selected_groove(self) -> None:
         sel = self.groove_tree.selection()
         if not sel:
             return
-        path = Path(sel[0])
-        self.groove_player.play_file(path)
-        self.groove_status.set(f"Playing: {path.stem}")
+        iid = sel[0]
+        self._stop_all_playback()
+        if iid.startswith("wav:"):
+            self._play_audio_loop(Path(iid[4:]), self.groove_status)
+        elif iid.startswith("mid:"):
+            self._play_midi_groove(Path(iid[4:]), self.groove_status)
 
     def _show_about(self) -> None:
         import sys
@@ -465,20 +1332,28 @@ class DrummerStudioApp(tk.Tk):
         ttk.Button(btns, text="License (web)", command=lambda: webbrowser.open(LICENSE_URL)).pack(side="left")
         ttk.Button(btns, text="Close", command=win.destroy).pack(side="right")
 
-    def _show_sources_dialog(self) -> None:
+    def _show_libraries_dialog(self) -> None:
         win = tk.Toplevel(self)
-        win.title("Sample Sources")
+        win.title("Libraries")
         win.geometry("520x420")
         win.configure(bg=THEME["panel"])
         text = tk.Text(win, bg=THEME["panel2"], fg=THEME["text"], wrap="word", relief="flat")
         text.pack(fill="both", expand=True, padx=12, pady=12)
-        catalog = load_catalog()
-        lines = [f"{PUBLISHER} — libraries on this PC\n"]
+        root = libraries_root()
+        manifest = load_manifest()
+        lines = [f"{APP_NAME} — local libraries\n", f"Folder: {root}\n"]
         for d in self.detected:
-            lines.append(f"• {d.name}: {d.wav_count:,} samples, {d.midi_count:,} MIDI")
-        lines.append("\nSupported vendors:")
-        for s in catalog.get("sources", []):
-            lines.append(f"  {s.get('name')} ({s.get('vendor')})")
+            lines.append(f"• {d.name}: {d.wav_count:,} samples, {d.midi_count:,} grooves")
+        extras = manifest.get("extras", {})
+        for key, folder in extras.items():
+            path = root / folder
+            if path.is_dir():
+                wavs = sum(1 for _ in path.rglob("*.wav"))
+                mids = sum(1 for _ in path.rglob("*.mid"))
+                ptn = sum(1 for _ in path.rglob("*.ptn"))
+                label = key.replace("_", " ").title()
+                detail = f"{wavs} wav" if wavs else f"{mids} mid" if mids else f"{ptn} patterns"
+                lines.append(f"• {label}: {detail} ({folder})")
         text.insert("1.0", "\n".join(lines))
         text.configure(state="disabled")
         btns = ttk.Frame(win)
@@ -490,18 +1365,23 @@ class DrummerStudioApp(tk.Tk):
         chosen = filedialog.askdirectory(title="Select drum library folder")
         if not chosen:
             return
-        from library_scanner import DetectedLibrary, _count_wavs, _find_midi_root
-
-        path = Path(chosen)
-        midi_root = _find_midi_root(path) or _find_midi_root(path.parent)
-        self.detected.append(
-            DetectedLibrary(
-                path=path, name=path.name, source_id="custom",
-                wav_count=_count_wavs(path), midi_root=midi_root,
-                midi_count=len(list(midi_root.rglob("*.mid"))) if midi_root else 0,
-            )
-        )
-        self.rescan()
+        custom = add_custom_library(Path(chosen))
+        self.detected = detect_all() + [custom]
+        labels = []
+        for d in self.detected:
+            if d.playable_wav_count:
+                labels.append(f"{d.name}  ({d.playable_wav_count:,} playable samples)")
+            elif d.library_type == "pdk" and d.playable_wav_count == 0:
+                labels.append(f"{d.name}  (PDK — select to extract samples)")
+            elif d.library_type == "vst":
+                labels.append(f"{d.name}  (VST3 plugin — use in your DAW)")
+            elif d.sample_format == "ttpw":
+                labels.append(f"{d.name}  (Toontrack format — kit won't play here)")
+            else:
+                labels.append(f"{d.name}  ({d.wav_count:,} samples)")
+        self.library_combo["values"] = labels
+        self.library_combo.current(len(labels) - 1)
+        self.on_library_change()
 
 
 def main() -> None:

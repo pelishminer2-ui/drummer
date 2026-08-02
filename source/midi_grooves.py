@@ -5,10 +5,15 @@ from __future__ import annotations
 import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import mido
+
+from audio_prep import PREVIEW_LOOP_COUNT
+from groove_render import buffer_to_pygame_sound, render_midi_to_buffer
+from library_parser import DrumKit
 
 
 @dataclass
@@ -84,48 +89,103 @@ class GrooveLibrary:
 
 
 class GroovePlayer:
-    def __init__(self, trigger_callback) -> None:
-        self._trigger = trigger_callback
+    """Play MIDI grooves as one pre-rendered audio stream — smooth like WAV/MP3."""
+
+    def __init__(self) -> None:
+        self._channel = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.playing = False
+        self._render_cache: dict[tuple, object] = {}
 
     def stop(self) -> None:
         self._stop.set()
+        if self._channel:
+            try:
+                self._channel.stop()
+            except Exception:
+                pass
+        self._channel = None
         self.playing = False
 
-    def play_file(self, path: Path) -> None:
+    def play_file(
+        self,
+        path: Path,
+        kit: DrumKit,
+        *,
+        channel_volume: dict[str, float] | None = None,
+        master_volume: float = 1.0,
+        on_ready: Callable[[], None] | None = None,
+        on_error: Callable[[Exception], None] | None = None,
+    ) -> None:
         self.stop()
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, args=(path,), daemon=True)
+        self._thread = threading.Thread(
+            target=self._run,
+            args=(path, kit, channel_volume or {}, master_volume, on_ready, on_error),
+            daemon=True,
+        )
         self._thread.start()
 
-    def _run(self, path: Path) -> None:
+    def _cache_key(self, path: Path, kit: DrumKit, channel_volume: dict[str, float], master_volume: float) -> tuple:
+        mtime = path.stat().st_mtime if path.exists() else 0
+        vol_key = tuple(sorted((k, round(v, 3)) for k, v in channel_volume.items()))
+        return (str(path.resolve()), mtime, kit.name, vol_key, round(master_volume, 3))
+
+    def _run(
+        self,
+        path: Path,
+        kit: DrumKit,
+        channel_volume: dict[str, float],
+        master_volume: float,
+        on_ready: Callable[[], None] | None,
+        on_error: Callable[[Exception], None] | None,
+    ) -> None:
         self.playing = True
         try:
-            midi = mido.MidiFile(str(path))
-            tempo = 500000
-            events: list[tuple[float, int, int]] = []
+            key = self._cache_key(path, kit, channel_volume, master_volume)
+            sound = self._render_cache.get(key)
+            if sound is None:
+                if self._stop.is_set():
+                    return
+                mono = render_midi_to_buffer(
+                    path,
+                    kit,
+                    channel_volume=channel_volume,
+                    master_volume=master_volume,
+                )
+                if self._stop.is_set():
+                    return
+                sound = buffer_to_pygame_sound(mono)
+                if len(self._render_cache) > 24:
+                    self._render_cache.clear()
+                self._render_cache[key] = sound
 
-            for track in midi.tracks:
-                tick = 0
-                track_tempo = tempo
-                for msg in track:
-                    tick += msg.time
-                    if msg.type == "set_tempo":
-                        track_tempo = msg.tempo
-                    if msg.type == "note_on" and msg.velocity > 0:
-                        sec = mido.tick2second(tick, midi.ticks_per_beat, track_tempo)
-                        events.append((sec, msg.note, msg.velocity))
+            if self._stop.is_set():
+                return
+            if on_ready:
+                on_ready()
 
-            events.sort(key=lambda item: item[0])
-            start = time.perf_counter()
-            for sec, note, velocity in events:
+            for loop_idx in range(PREVIEW_LOOP_COUNT):
                 if self._stop.is_set():
                     break
-                wait = sec - (time.perf_counter() - start)
-                if wait > 0:
-                    time.sleep(wait)
-                self._trigger(note, velocity)
+                self._channel = sound.play()
+                if not self._channel:
+                    raise RuntimeError("Audio playback failed — check mixer / sound device.")
+                while self._channel.get_busy():
+                    if self._stop.is_set():
+                        self._channel.stop()
+                        break
+                    time.sleep(0.05)
+                if self._stop.is_set():
+                    break
+                if loop_idx < PREVIEW_LOOP_COUNT - 1:
+                    time.sleep(0.08)
+        except Exception as exc:
+            self.playing = False
+            if on_error:
+                on_error(exc)
+            return
         finally:
             self.playing = False
+            self._channel = None

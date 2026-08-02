@@ -10,10 +10,14 @@ try {
         --onefile `
         --windowed `
         --name "Drummer" `
-        --add-data "source_catalog.json;." `
         --add-data "..\LICENSE;." `
+        --add-data "assets;assets" `
         --hidden-import PIL.Image `
         --hidden-import PIL.ImageTk `
+        --hidden-import pygame.sndarray `
+        --hidden-import audio_prep `
+        --hidden-import groove_render `
+        --hidden-import midi_drum_map `
         drummer_app.py
 
     $built = Join-Path $here "dist\Drummer.exe"

@@ -2,23 +2,21 @@
 
 **Free, open-source drum studio software** for Windows.
 
-Drummer Studio lets anyone play drum kits, browse MIDI grooves, and mix drums using sample libraries already installed on their computer (Toontrack EZDrummer, Cakewalk Drum Replacer, custom folders, and more).
+Drummer Studio is a standalone drum player with a visual kit, groove browser, and mixer. All sample libraries live under `Libraries/` next to the app — no external product names in the UI.
 
-No purchase required. No account required. MIT licensed — use, modify, and share freely.
+MIT licensed — use, modify, and share freely.
 
 ## Features
 
-- Clickable drum kit view (photo-based, EZdrummer-style)
+- Clickable drum kit view with photo-based hit zones
 - Groove browser with search and playback
 - Mixer with channel faders and presets (Default, Roomy, Dry)
-- Auto-detects Toontrack, Cakewalk, and custom library folders
-- Reads standard WAV samples and MIDI files from disk
+- Self-contained `Libraries/` folder structure
+- Reads standard WAV samples, SFZ kits, and MIDI grooves
 
-## Important: samples are not included
+## Important: samples are not included in the repo
 
-Drummer Studio is **application software only**. It does not ship with or redistribute any Toontrack, Cakewalk, or third-party drum samples.
-
-You must **legally own and install** your own sample libraries. This project is not affiliated with or endorsed by Toontrack, BandLab/Cakewalk, or any other vendor.
+The application does not ship with drum audio. Run `Import-Libraries.ps1` on your own machine to copy libraries you legally own into `F:\Drummer\Libraries` (or your install path).
 
 ## Quick start
 
@@ -32,6 +30,12 @@ Windows 11\Drummer Studio.exe
 
 ```powershell
 .\Install Drummer Studio.ps1
+```
+
+### Import libraries (first-time setup)
+
+```powershell
+.\Import-Libraries.ps1
 ```
 
 ### Run from source
@@ -50,6 +54,19 @@ pip install -r requirements.txt pyinstaller
 .\build_installer.ps1
 ```
 
+## Library layout
+
+| Folder | Contents |
+|--------|----------|
+| `Libraries/Studio-Core` | Main WAV kit |
+| `Libraries/Latin-Percussion` | Expansion kit + UI photos |
+| `Libraries/Pack-Punk` | Punk rock one-shots + audio loops |
+| `Libraries/Pack-SFZ` | SFZ drum kits |
+| `Libraries/Grooves` | Main MIDI groove library |
+| `Libraries/Grooves-Extended` | Additional MIDI grooves |
+| `Libraries/Click-Sounds` | Metronome click WAVs |
+| `Libraries/Grooves/User-Projects` | Your project MIDI |
+
 ## License
 
 [MIT License](LICENSE) — free for personal and commercial use.
@@ -57,12 +74,3 @@ pip install -r requirements.txt pyinstaller
 ## Contributing
 
 Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Third-party libraries
-
-Runtime dependencies (also open source):
-
-- [pygame](https://www.pygame.org/) — audio playback
-- [mido](https://mido.readthedocs.io/) — MIDI file reading
-- [Pillow](https://python-pillow.org/) — kit image display
-- [numpy](https://numpy.org/) — audio support

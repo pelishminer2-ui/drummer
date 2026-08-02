@@ -1,4 +1,4 @@
-"""Parse kit UI layout and mixer configs from Toontrack-style libraries."""
+"""Parse kit UI layout and mixer configs from library folders."""
 
 from __future__ import annotations
 
@@ -6,14 +6,18 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Drum piece on kit photo -> sampler pad name(s)
+from library_scanner import libraries_root, load_manifest
+
+PIECE_HIT_PRIORITY: list[str] = ["Ride", "Hats", "Crash", "Snare", "Snare2", "Tom", "Kick"]
+
 PIECE_TO_PADS: dict[str, list[str]] = {
     "Kick": ["kickR", "kick"],
     "Snare": ["snareR", "snare"],
-    "Snare2": ["hsnareR"],
+    "Snare2": ["hsnareR", "tom1R", "tom_floor", "tom_lo"],
     "Tom": ["tom1L", "tom1R", "tom_hi", "tom_lo", "tom_floor"],
     "Hats": ["hatsCL", "hatsO1", "hatsPL"],
-    "Ride": ["ride4", "ride4BL", "ride4PU"],
+    "Ride": ["ride4", "ride4BL", "ride4PU", "crash1", "crash"],
+    "Crash": ["crash1", "crash", "ride4"],
 }
 
 PAD_TO_PIECE: dict[str, str] = {}
@@ -27,6 +31,10 @@ PAD_ALIASES_ENGINE: dict[str, list[str]] = {
     "tom1L": ["tom_hi"],
     "tom1R": ["tom_lo", "tom_floor"],
     "hsnareR": ["tom_floor"],
+    "hatsCL": ["hats"],
+    "hatsO1": ["hats"],
+    "ride4": ["ride", "crash"],
+    "crash1": ["crash", "ride"],
 }
 
 
@@ -60,19 +68,58 @@ class MixerChannel:
 class MixerPreset:
     name: str
     channels: dict[str, MixerChannel] = field(default_factory=dict)
+    room_send: float = 0.0  # 0 = dry close mics, 1 = heavy room (Roomy / OnlyOh)
+
+
+_PRESET_ROOM_SEND: dict[str, float] = {
+    "Default": 0.08,
+    "Roomy": 0.55,
+    "Dry": 0.0,
+    "OnlyOh": 0.92,
+}
+
+
+def _finalize_preset(name: str, preset: MixerPreset) -> None:
+    """Derive room send from preset name and overhead fader levels."""
+    oh = preset.channels.get("Oh")
+    kick = preset.channels.get("Kick")
+    if kick and kick.volume <= 0.01:
+        preset.room_send = _PRESET_ROOM_SEND.get("OnlyOh", 0.9)
+        return
+    if name in _PRESET_ROOM_SEND:
+        preset.room_send = _PRESET_ROOM_SEND[name]
+        return
+    if oh:
+        preset.room_send = max(0.0, min(0.75, (oh.volume - 0.45) * 1.2))
+    else:
+        preset.room_send = 0.1
+
+
+def _visual_library_root(library_root: Path) -> Path:
+    root = library_root.resolve()
+    if (root / "kitconf").exists():
+        return root
+
+    manifest = load_manifest()
+    lib_root = libraries_root()
+    folder_name = root.name
+    for entry in manifest.get("libraries", []):
+        if entry.get("folder") == folder_name:
+            visual_from = entry.get("visual_from")
+            if visual_from:
+                candidate = lib_root / visual_from
+                if (candidate / "kitconf").exists():
+                    return candidate
+            break
+
+    for sibling in root.parent.iterdir():
+        if sibling.is_dir() and (sibling / "kitconf").exists():
+            return sibling
+    return root
 
 
 def find_kit_assets(library_root: Path) -> tuple[Path | None, Path | None]:
-    """Return (kit_image, kitconf) if present."""
-    root = library_root.resolve()
-    if (root / "Sounds").is_dir() and root.name != "EZX_Cocktail":
-        # Core library — check parent EZX or use generic
-        parent = root.parent
-        for candidate in [root, parent / "EZX_Cocktail"]:
-            if (candidate / "kitconf").exists():
-                root = candidate
-                break
-
+    root = _visual_library_root(library_root)
     kitconf = root / "kitconf"
     image = None
     for name in ("bmp00128.png", "bmp00136.png", "kit.png"):
@@ -98,7 +145,6 @@ def parse_kitconf(path: Path) -> list[KitRegion]:
         nums = [int(n) for n in match.group(2).split()]
         if len(nums) < 8:
             continue
-        # hit rectangle is typically the second group of 4 coords
         x, y, w, h = nums[4], nums[5], nums[6], nums[7]
         if w <= 0 or h <= 0:
             continue
@@ -108,6 +154,12 @@ def parse_kitconf(path: Path) -> list[KitRegion]:
 
 
 def load_kit_visual(library_root: Path) -> KitVisual:
+    from kit_art import load_neutral_kit_visual
+
+    return load_neutral_kit_visual(library_root)
+
+
+def _load_kit_visual_legacy(library_root: Path) -> KitVisual:
     image_path, kitconf_path = find_kit_assets(library_root)
     regions: list[KitRegion] = []
     if kitconf_path:
@@ -129,16 +181,20 @@ def load_kit_visual(library_root: Path) -> KitVisual:
     return KitVisual(image_path=image_path, regions=regions, canvas_width=width, canvas_height=height)
 
 
-def _default_regions() -> list[KitRegion]:
-    """Fallback click zones when no kitconf exists."""
+def _neutral_kit_regions() -> list[KitRegion]:
+    """Hit zones tuned for the neutral kit photo (827×483)."""
     return [
-        KitRegion("Kick", 340, 300, 120, 80, ["kickR", "kick"]),
-        KitRegion("Snare", 300, 180, 100, 70, ["snareR", "snare"]),
-        KitRegion("Hats", 120, 140, 90, 60, ["hatsCL", "hatsO1"]),
-        KitRegion("Tom", 220, 200, 80, 60, ["tom1L", "tom_hi"]),
-        KitRegion("Snare2", 400, 120, 70, 50, ["tom1R", "tom_lo", "hsnareR"]),
-        KitRegion("Ride", 580, 120, 100, 80, ["ride4"]),
+        KitRegion("Kick", 350, 248, 190, 120, ["kickR", "kick"]),
+        KitRegion("Snare", 392, 39, 138, 96, ["snareR", "snare"]),
+        KitRegion("Tom", 271, 98, 104, 64, ["tom1L", "tom_hi"]),
+        KitRegion("Snare2", 272, 14, 103, 57, ["tom1R", "tom_lo", "hsnareR"]),
+        KitRegion("Hats", 88, 52, 175, 115, ["hatsCL", "hatsO1"]),
+        KitRegion("Ride", 530, 18, 240, 155, ["ride4", "crash1"]),
     ]
+
+
+def _default_regions() -> list[KitRegion]:
+    return _neutral_kit_regions()
 
 
 def parse_micconf(path: Path) -> tuple[list[MixerChannel], dict[str, MixerPreset]]:
@@ -208,6 +264,9 @@ def parse_micconf(path: Path) -> tuple[list[MixerChannel], dict[str, MixerPreset
     if not presets:
         presets = _default_mixer()[1]
 
+    for name, preset in presets.items():
+        _finalize_preset(name, preset)
+
     return list(channels.values()), presets
 
 
@@ -241,13 +300,24 @@ def _default_mixer() -> tuple[list[MixerChannel], dict[str, MixerPreset]]:
                 "Oh": MixerChannel("Oh", "OH", 0.4, 0.5),
             },
         ),
+        "OnlyOh": MixerPreset(
+            name="OnlyOh",
+            channels={
+                "Kick": MixerChannel("Kick", "KD", 0.0, 0.5),
+                "Snare": MixerChannel("Snare", "SD", 0.0, 0.5),
+                "Snare2": MixerChannel("Snare2", "SD2", 0.0, 0.5),
+                "Tom": MixerChannel("Tom", "TOM", 0.0, 0.5),
+                "Hats": MixerChannel("Hats", "HH", 0.0, 0.5),
+                "Oh": MixerChannel("Oh", "OH", 1.0, 0.5),
+            },
+        ),
     }
+    for name, preset in presets.items():
+        _finalize_preset(name, preset)
     return channels, presets
 
 
 def load_mixer(library_root: Path) -> tuple[list[MixerChannel], dict[str, MixerPreset]]:
-    root = library_root.resolve()
+    root = _visual_library_root(library_root)
     micconf = root / "micconf"
-    if not micconf.exists() and (root.parent / "EZX_Cocktail" / "micconf").exists():
-        micconf = root.parent / "EZX_Cocktail" / "micconf"
     return parse_micconf(micconf)

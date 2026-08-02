@@ -24,7 +24,7 @@ python drummer_app.py
 - Do not commit proprietary sample libraries or licensed audio content
 - Do not add code that bypasses third-party DRM or license checks
 - Match existing code style and keep changes focused
-- Document new library formats in `source/source_catalog.json` when possible
+- Document new library formats in `Libraries/manifest.json` when possible
 
 ## Ideas welcome
 

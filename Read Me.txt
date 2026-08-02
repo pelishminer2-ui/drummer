@@ -1,22 +1,31 @@
-Drummer Studio — Free & Open Source
+Version: 2.6.1
+
+Drummer Studio â€” Free & Open Source
 =====================================
 
-MIT License. Free for everyone — use, modify, share, and sell
+MIT License. Free for everyone â€” use, modify, share, and sell
 your own builds. See LICENSE and README.md for full terms.
 
 WHAT IT IS
 ----------
-Open-source drum studio software. Application code only — no
-sample libraries are included or redistributed.
+Open-source drum studio software. Application code only â€” no
+sample libraries are included in the repository.
 
-You play drums using WAV/MIDI libraries you already own and
-have installed (EZDrummer, Cakewalk, custom folders, etc.).
+Libraries are stored locally under:
+  F:\Drummer\Libraries
+
+Run Import-Libraries.ps1 once to copy your owned content into
+that folder using neutral names.
 
 INSTALL
 -------
   .\Install Drummer Studio.ps1
 
 Or run:  Windows 11\Drummer Studio.exe
+
+IMPORT LIBRARIES
+----------------
+  .\Import-Libraries.ps1
 
 SOURCE CODE
 -----------
@@ -31,7 +40,7 @@ BUILD
 
 CONTRIBUTING
 ------------
-See CONTRIBUTING.md — pull requests welcome.
+See CONTRIBUTING.md â€” pull requests welcome.
 
 Drummer Studio Contributors
-https://github.com (publish your repo URL here)
+https://github.com/pelishminer2-ui/drummer
