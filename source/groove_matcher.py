@@ -172,7 +172,7 @@ def find_matches(
     analysis: AudioAnalysis,
     midi_grooves: list[GrooveInfo],
     audio_loops: list[AudioLoopInfo],
-    limit: int = 60,
+    limit: int = 15,
     bpm_prefilter: int = 900,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> list[GrooveMatch]:
@@ -199,7 +199,7 @@ def find_matches(
     if any(k == "wav" for k, *_ in prefilter):
         from wav_io import load_audio_mono
 
-        for kind, path, name, genre, bpm_label, _ in prefilter:
+        for kind, path, name, genre, bpm_label, _, _partial in prefilter:
             if kind != "wav":
                 continue
             try:

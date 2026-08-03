@@ -1530,7 +1530,7 @@ class DrummerStudioApp(_TkBase):
                     analysis,
                     midi_grooves,
                     audio_loops,
-                    limit=60,
+                    limit=15,
                     on_progress=rank_progress,
                 )
                 self.after(0, lambda m=matches: self._finish_groove_matches(m))

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scan F:\\Drummer\\Libraries and rewrite manifest.json with live metadata."""
+"""Scan Libraries and rewrite manifest.json with live metadata."""
 
 from __future__ import annotations
 

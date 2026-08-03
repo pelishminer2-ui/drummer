@@ -1,6 +1,6 @@
 # Drummer Studio
 
-**Free, open-source drum studio software** for Windows — v**2.6.17**
+**Free, open-source drum studio software** for Windows — v**2.6.19**
 
 Drummer Studio is a standalone drum player with a visual kit, groove browser, AI-powered match finder, and mixer. Sample libraries live under `Libraries/` next to the app.
 
@@ -23,11 +23,11 @@ Three ways to feed the matcher — use any or all:
 
 | Button | What it does |
 |--------|----------------|
-| **Record Guitar** | Mic capture (4–30 sec), then analyze |
+| **Record Guitar** | Mic capture (5s count-in, then 4–30 sec), then analyze |
 | **Import Track** | Pick WAV, MP3, FLAC, or OGG from disk |
 | **Match Selected** | Use the highlighted row in Grooves, Ass Kickers, or Selected Tracks |
 
-Analysis detects **BPM, key, rhythm feel**, and deep features (GPU when available). Results land on the **Matches Found** tab with match % scores. **Drag** a match into Audacity or another app.
+Analysis detects **BPM, key, rhythm feel**, and deep features (GPU when available). **Find Matches** scans all of `Libraries/` and shows the top **15** results on the **Matches Found** tab (best Match % first). **Drag** a match into Audacity or another app.
 
 Optional: **Open in Audacity** after recording.
 
@@ -45,17 +45,21 @@ The app does not ship with every drum library. Run import scripts on your machin
 
 | Script | Purpose |
 |--------|---------|
-| `Import-Libraries.ps1` | Copy owned kits/grooves into `Libraries/` |
+| `Import-Libraries.ps1` | Copy owned kits/grooves into `Libraries/` (optional `-LibRoot`) |
 | `Import-Monkey-Alts.ps1` | Download 14 alt-rock loop demos (SoundCloud) |
 | `Import-Metal-Hitters.ps1` | Download 27 metal loop demos (SoundCloud) |
+| `Import-Stream-Loops.ps1` | Run both Monkey Alts and Metal Hitters imports |
 | `Import-Cool-Imports.ps1` | Import your WAV/MP3/MIDI into Cool Imports |
-| `Import-SSD-Demos.ps1` | Fetch Ass Kickers demo tracks |
+| `Import-SSD-Demos.ps1` | Fetch Ass Kickers demo tracks (optional `-Root`) |
+| `Import-MT-Wild-Drums.ps1` | Extract MT Power Drum Kit from Downloads zip |
 
 **Cannot import:** XLN Addictive Drums `.xpak` (locked plugin format). Export WAV from your DAW instead.
 
 ## Quick start
 
 ### Run without installing
+
+Keep the whole folder together (`Drummer Studio.exe` + `_internal/`):
 
 ```text
 Windows 11\Drummer Studio.exe
@@ -83,7 +87,13 @@ pip install -r requirements.txt pyinstaller
 .\build_installer.ps1
 ```
 
-Output: `Windows 10\Drummer Studio.exe`, `Windows 11\Drummer Studio.exe`
+Output: `Windows 10\` and `Windows 11\` folders, each with `Drummer Studio.exe` and `_internal\`.
+
+Full project sync (manifest + rebuild):
+
+```powershell
+.\Sync-Drummer.ps1
+```
 
 ## Library layout
 
@@ -101,6 +111,7 @@ Output: `Windows 10\Drummer Studio.exe`, `Windows 11\Drummer Studio.exe`
 | `Libraries/Demo-Tracks` | Ass Kickers demos |
 | `Libraries/User-Recordings` | Guitar takes for matching |
 | `Libraries/Click-Sounds` | Metronome click WAVs |
+| `Libraries/MT-Wild-Drums` | MT Power Drum Kit (run import script) |
 
 See `Libraries/manifest.json` for the full registry.
 

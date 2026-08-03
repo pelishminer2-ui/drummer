@@ -52,5 +52,5 @@ def load_session_grooves(current: DetectedLibrary | None = None) -> list[GrooveI
 
 
 def scan_all_grooves() -> list[GrooveInfo]:
-    """Every *.mid under F:\\Drummer\\Libraries (legacy helper)."""
+    """Every *.mid under Libraries (legacy helper)."""
     return load_session_grooves()

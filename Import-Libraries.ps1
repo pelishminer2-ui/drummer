@@ -1,8 +1,14 @@
-# Import drum content into F:\Drummer\Libraries using neutral folder names only.
+# Import drum content into Libraries\ using neutral folder names only.
 # Safe to re-run — robocopy skips unchanged files.
+#
+# By default this targets the "Libraries" folder next to this script.
+# Pass -LibRoot to point at a different drive/location, e.g.:
+#   .\Import-Libraries.ps1 -LibRoot "F:\Drummer\Libraries"
+param(
+    [string]$LibRoot = (Join-Path $PSScriptRoot "Libraries")
+)
 
 $ErrorActionPreference = "Stop"
-$LibRoot = "F:\Drummer\Libraries"
 
 $Sources = @{
     EzCore      = "C:\Program Files (x86)\Toontrack\EZDrummer\Sounds"
@@ -178,8 +184,10 @@ Get-ChildItem $Sources.CwProjects -Filter "*.lnk*" -ErrorAction SilentlyContinue
     } catch {}
 }
 
-# Beta Monkey Punk pack (RAR archives on D:)
-$BetaMonkey = "D:\Beta Monkey Drum Werks X - Punk"
+# Beta Monkey Punk pack (RAR archives) — edit $BetaMonkey below if yours
+# lives somewhere other than a "Beta Monkey Drum Werks X - Punk" folder
+# next to this script, e.g. "D:\Beta Monkey Drum Werks X - Punk".
+$BetaMonkey = Join-Path $PSScriptRoot "Beta Monkey Drum Werks X - Punk"
 $PunkDest = Join-Path $LibRoot "Pack-Punk"
 $7z = "C:\Program Files\7-Zip\7z.exe"
 

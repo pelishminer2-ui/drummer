@@ -1,4 +1,4 @@
-# Sync metadata + rebuild Drummer Studio for F:\Drummer
+# Sync metadata + rebuild Drummer Studio (run from project root)
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 $Source = Join-Path $Root "source"
@@ -30,16 +30,17 @@ finally {
     Pop-Location
 }
 
-# 3) Update Read Me.txt version stamp
+# 3) Update Read Me.txt version stamp (preserve UTF-8)
 $ReadMe = Join-Path $Root "Read Me.txt"
 if (Test-Path $ReadMe) {
-    $text = Get-Content $ReadMe -Raw
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    $text = [System.IO.File]::ReadAllText($ReadMe, $utf8)
     if ($text -match "Version: [0-9.]+") {
         $text = $text -replace "Version: [0-9.]+", "Version: $Version"
     } else {
         $text = "Version: $Version`r`n`r`n" + $text
     }
-    [System.IO.File]::WriteAllText($ReadMe, $text.TrimEnd() + "`r`n")
+    [System.IO.File]::WriteAllText($ReadMe, $text.TrimEnd() + "`r`n", $utf8)
     Write-Host "Updated Read Me.txt" -ForegroundColor Green
 }
 

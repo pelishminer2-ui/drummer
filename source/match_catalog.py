@@ -1,4 +1,4 @@
-"""Scan all of F:\\Drummer\\Libraries for groove matching after a recording."""
+"""Scan all of Libraries for groove matching after a recording."""
 
 from __future__ import annotations
 

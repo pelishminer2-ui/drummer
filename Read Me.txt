@@ -1,46 +1,50 @@
 Version: 2.6.19
 
-Drummer Studio ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Free & Open Source
+Drummer Studio - Free & Open Source
 =====================================
 
-MIT License. Free for everyone ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â use, modify, share, and sell
+MIT License. Free for everyone - use, modify, share, and sell
 your own builds. See LICENSE and README.md for full terms.
 
 WHAT IT CAN DO
 --------------
-ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Play drum kits ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â click the kit photo or use keyboard (Space kick, F snare, etc.)
-ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Browse and play MIDI grooves and audio loops (Grooves tab)
-ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Mixer with faders, pan, and presets (Default, Roomy, Dry)
-ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Match your music to library grooves:
+- Play drum kits - click the kit photo or use keyboard (Space kick, F snare, etc.)
+- Browse and play MIDI grooves and audio loops (Grooves tab)
+- Mixer with faders, pan, and presets (Default, Roomy, Dry)
+- Match your music to library grooves:
     - Record Guitar (5s built-in metronome count-in, then mic capture)
     - Import Track (WAV / MP3 / FLAC / OGG from disk)
     - Match Selected (pick a loop in Grooves or Ass Kickers)
-  Results appear on the Matches Found tab ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â drag into Audacity or your DAW
-ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Ass Kickers ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â demo tracks with genre filter
-ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Selected Tracks ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pin favorites from the active library
-ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Open in Audacity after recording (optional)
-ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Kit lights up with the groove during playback
+  Results appear on the Matches Found tab - drag into Audacity or your DAW
+- Ass Kickers - demo tracks with genre filter
+- Selected Tracks - pin favorites from the active library
+- Open in Audacity after recording (optional)
+- Kit lights up with the groove during playback
 
-LIBRARIES (local ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â not all included in git)
+LIBRARIES (local - not all included in git)
 -------------------------------------------
 Run Import-Libraries.ps1 for kits and grooves you own.
 
 Optional loop packs (download MP3s locally):
-  .\Import-Monkey-Alts.ps1    ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 14 alt-rock loops
-  .\Import-Metal-Hitters.ps1  ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 27 metal loops
-  .\Import-Cool-Imports.ps1   ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â your WAV/MP3/MIDI drop folder
+  .\Import-Monkey-Alts.ps1    - 14 alt-rock loops
+  .\Import-Metal-Hitters.ps1  - 27 metal loops
+  .\Import-Stream-Loops.ps1     - both loop packs (one command)
+  .\Import-Cool-Imports.ps1   - your WAV/MP3/MIDI drop folder
+  .\Import-MT-Wild-Drums.ps1    - MT Power Drum Kit from Downloads zip
+  .\Import-SSD-Demos.ps1        - Ass Kickers demo MP3s
 
 Libraries live under:
-  F:\Drummer\Libraries
+  Libraries\ (next to this file; pass -LibRoot or -Root to import scripts
+  to target a different drive/location instead)
 
-Note: XLN Addictive Drums .xpak files cannot be imported ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â export WAV
+Note: XLN Addictive Drums .xpak files cannot be imported - export WAV
 from your plugin/DAW and use Cool Imports instead.
 
 INSTALL & RUN
 -------------
   .\Install Drummer Studio.ps1
 
-Or run portable:
+Or run portable (keep the whole Windows 11 folder - includes _internal):
   Windows 11\Drummer Studio.exe
 
 SOURCE & BUILD

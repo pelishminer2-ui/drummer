@@ -2,6 +2,29 @@
 
 All notable changes to Drummer Studio are documented here.
 
+## [2.6.19] — 2026-08-02
+
+### Full-library groove matching
+- **Find Matches** scans all of `Libraries/` (~9,500 drum MIDI + ~700 audio loops)
+- BPM labels read from MIDI tempo (disk cache: `Libraries/groove-tempo-cache.json`)
+- **Matches Found** tab ranks results best-first by Match %; top **15** matches shown
+- Match progress in status bar while reading tempos and scoring candidates
+
+### Match search reliability
+- Fix bundled **mido** builds that lack `MidiFileError` (`mido_compat.py`)
+- Fix crash when audio loops were in the BPM prefilter (tuple unpack bug)
+- Skip 5-second record count-in during analysis
+
+### Windows build
+- Ship **folder-based** builds (`Drummer Studio.exe` + `_internal/`) so `python313.dll` loads reliably
+- Install script copies full app folder, not a single-file exe
+
+### Import scripts (portable paths)
+- `Import-Libraries.ps1` accepts `-LibRoot` (defaults to `Libraries\` next to script)
+- `Import-MT-Wild-Drums.ps1` accepts `-Root` and `-SourceDir`
+- `Import-SSD-Demos.ps1` accepts `-Root`
+- `Import-Stream-Loops.ps1` runs Monkey Alts + Metal Hitters imports
+
 ## [2.6.17] — 2026-08-02
 
 ### Record count-in metronome
@@ -23,7 +46,7 @@ All notable changes to Drummer Studio are documented here.
 - **Import Track** — WAV, MP3, FLAC, or OGG from disk
 - **Match Selected** — analyze a loop or demo already in Grooves, Ass Kickers, or Selected Tracks
 - Unified analysis pipeline; clearer status while recording or analyzing
-- Find Matches blocks until analysis finishes (no more false “import first” errors)
+- Find Matches blocks until analysis finishes (no more false "import first" errors)
 
 ### Other recent features (2.6.7–2.6.13)
 - **Matches Found** tab — ranked results without replacing the Grooves browser

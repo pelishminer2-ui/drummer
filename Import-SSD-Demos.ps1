@@ -1,8 +1,14 @@
-# Download Steven Slate Drums public demo MP3s into F:\Drummer\Libraries\Demo-Tracks.
+# Download Steven Slate Drums public demo MP3s into Libraries\Demo-Tracks
+# (next to this script by default).
 # Safe to re-run — skips files that are already downloaded.
+#
+# Pass -Root to target a different location, e.g.:
+#   .\Import-SSD-Demos.ps1 -Root "F:\Drummer"
+param(
+    [string]$Root = $PSScriptRoot
+)
 
 $ErrorActionPreference = "Stop"
-$Root = "F:\Drummer"
 $Dest = Join-Path $Root "Libraries\Demo-Tracks"
 
 Write-Host "Drummer Studio — SSD demo import" -ForegroundColor Cyan

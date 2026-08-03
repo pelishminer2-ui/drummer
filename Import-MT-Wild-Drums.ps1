@@ -1,11 +1,17 @@
-# Import MT Power Drum Kit (MT Wild Drums) from Downloads into F:\Drummer\Libraries\MT-Wild-Drums.
+# Import MT Power Drum Kit (MT Wild Drums) from a downloaded zip into
+# Libraries\MT-Wild-Drums (next to this script by default).
 # Safe to re-run - skips extraction if plugin files already exist.
+#
+# Pass -Root and/or -SourceDir to override, e.g.:
+#   .\Import-MT-Wild-Drums.ps1 -Root "F:\Drummer" -SourceDir "C:\Users\Me\Downloads\MTPowerDrumKit"
+param(
+    [string]$Root = $PSScriptRoot,
+    [string]$SourceDir = (Join-Path $env:USERPROFILE "Downloads")
+)
 
 $ErrorActionPreference = "Stop"
-$Root = "F:\Drummer"
 $LibRoot = Join-Path $Root "Libraries"
 $Dest = Join-Path $LibRoot "MT-Wild-Drums"
-$SourceDir = "C:\Users\Owner\Downloads\New folder (2)"
 $7z = "C:\Program Files\7-Zip\7z.exe"
 
 Write-Host "Drummer Studio - MT Wild Drums import" -ForegroundColor Cyan

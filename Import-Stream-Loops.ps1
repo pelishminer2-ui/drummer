@@ -1,18 +1,15 @@
-# Download ALL Beta Monkey SoundCloud libraries locally (no online playback).
+# Convenience wrapper: download ALL Beta Monkey SoundCloud libraries locally
+# (no online playback) by calling the individual import scripts, so the
+# download logic only lives in one place each.
 $ErrorActionPreference = "Stop"
-$Source = Join-Path $PSScriptRoot "source"
 
-Write-Host "Downloading stream loop libraries to F:\Drummer\Libraries ..." -ForegroundColor Cyan
-Push-Location $Source
-try {
-    python monkey_alts_import.py
-    if ($LASTEXITCODE -ne 0) { throw "monkey_alts_import failed" }
-    python metal_hitters_import.py
-    if ($LASTEXITCODE -ne 0) { throw "metal_hitters_import failed" }
-}
-finally {
-    Pop-Location
-}
+Write-Host "Downloading stream loop libraries ..." -ForegroundColor Cyan
+
+& (Join-Path $PSScriptRoot "Import-Monkey-Alts.ps1")
+if ($LASTEXITCODE -ne 0) { throw "Import-Monkey-Alts.ps1 failed" }
+
+& (Join-Path $PSScriptRoot "Import-Metal-Hitters.ps1")
+if ($LASTEXITCODE -ne 0) { throw "Import-Metal-Hitters.ps1 failed" }
 
 Write-Host ""
 Write-Host "Local libraries ready:" -ForegroundColor Green
